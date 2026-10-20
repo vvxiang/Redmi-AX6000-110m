@@ -7,7 +7,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #=================================================
 #1. Modify default IP
-sed -i 's/192.168.1.1/192.168.16.1/g' /builder/openwrt/package/base-files/files/bin/config_generate
+sed -i 's/192.168.1.1/192.168.100.1/g' /builder/openwrt/package/base-files/files/bin/config_generate
 
 #2. 修改默认皮肤
 #sed -i 's/+luci-theme-bootstrap/+luci-theme-argon/g' /builder/openwrt/feeds/luci/collections/luci/Makefile
@@ -32,16 +32,16 @@ cat > /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip <<'EOF'
 # 2.4G radio0
 uci set wireless.radio0.disabled='0'
 uci set wireless.radio0.country='CN'
-uci set wireless.default_radio0.ssid='Redmi-2.4G'
+uci set wireless.default_radio0.ssid='MT7968_AX6000_2.4G'
 uci set wireless.default_radio0.encryption='psk2+ccmp'
-uci set wireless.default_radio0.key='qwer1234'
+uci set wireless.default_radio0.key='Xwvv#642531'
 
 # 5G radio1
 uci set wireless.radio1.disabled='0'
 uci set wireless.radio1.country='CN'
-uci set wireless.default_radio1.ssid='Redmi-5G'
+uci set wireless.default_radio1.ssid='MT7968_AX6000_5G'
 uci set wireless.default_radio1.encryption='psk2+ccmp'
-uci set wireless.default_radio1.key='qwer1234'
+uci set wireless.default_radio1.key='Xwvv#642531'
 
 uci commit network
 uci commit wireless
