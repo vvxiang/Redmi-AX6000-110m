@@ -181,10 +181,17 @@ jobs:
       run: |
         ./scripts/feeds install -a
 
-    - name: Install feeds
-      working-directory: /builder/openwrt
-      run: |
-        ./scripts/feeds install -a
+        
+    - name: SSH12
+      uses: P3TERX/ssh2actions@v1.0.0
+      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+      env:
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+    #- name: Install feeds
+     # working-directory: /builder/openwrt
+    #  run: |
+      #  ./scripts/feeds install -a
 
        # ======== 编译 OpenClash 最新版（使用 package 编译法）不推荐 =========
        # OpenClash 推荐使用上方写入 ./feeds.conf.default 编译法
