@@ -147,7 +147,7 @@ jobs:
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
     - name: Upload firmware directory
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ImmortalWrt_Redmi_AX6000_110M
         path: ${{ env.FIRMWARE_PATH }}
