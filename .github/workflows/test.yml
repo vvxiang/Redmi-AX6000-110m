@@ -1,0 +1,153 @@
+#=================================================
+# Copyright (c) 2019-2023 sky2016cn
+# Author: sky2016cn
+# licensed under the MIT License
+# See /LICENSE for more information
+# Description: Build OpenWrt using GitHub Actions
+#=================================================
+
+name: immortalwrt_110m_compact_25.12
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Maximize build space
+      uses: easimon/maximize-build-space@master
+      with:
+        root-reserve-mb: 2048
+        temp-reserve-mb: 512
+        swap-size-mb: 2048
+        remove-dotnet: 'true'
+        remove-android: 'true'
+        remove-haskell: 'true'
+        remove-codeql: 'true'
+        overprovision-lvm: 'true'
+        build-mount-path: '/builder'        
+
+    - name: Prepare Builder Directory
+      run: |
+        sudo mkdir -p /builder
+        sudo chown -R runner:runner /builder
+        df -hT
+
+    - name: Checkout repository
+      uses: actions/checkout@v4        
+
+    - name: Initialization environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo -E apt-get -qq update
+        sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+        sudo -E apt-get -qq autoremove --purge
+        sudo -E apt-get -qq clean
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc /usr/share/dotnet /usr/local/graalvm /usr/local/.ghcup \
+        /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules
+        sudo timedatectl set-timezone "Asia/Shanghai"
+
+    - name: Check Space
+      run: df -h
+
+    - name: Clone source code
+      env:
+        REPO_URL: https://github.com/immortalwrt/immortalwrt
+      run: |
+        git clone -b openwrt-25.12 --single-branch --filter=blob:none $REPO_URL /builder/openwrt || { echo 'Git clone failed!'; exit 1; }
+        cd /builder/openwrt   
+        
+        # 注入 OpenClash 与 Passwall 最新版源码源
+        sed -i '1i src-git openclash https://github.com/vernesong/OpenClash.git;master' ./feeds.conf.default
+        sed -i '1i src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main' ./feeds.conf.default
+        sed -i '1i src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main' ./feeds.conf.default
+
+    - name: Apply AX6000 110M Layout Modifications
+      working-directory: /builder/openwrt
+      run: |
+        cat << 'EOF' >> target/linux/mediatek/image/filogic.mk
+
+        define Device/xiaomi_redmi-router-ax6000-110m
+          $(Device/xiaomi_redmi-router-ax6000-stock)
+          DEVICE_VARIANT := (hanwckf 110M layout)
+          DEVICE_DTS := mt7986a-xiaomi-redmi-router-ax6000-110m
+          SUPPORTED_DEVICES := xiaomi,redmi-router-ax6000
+          IMAGE_SIZE := 112640k
+          KERNEL_IN_UBI := 1
+          IMAGES := factory.bin sysupgrade.bin
+          IMAGE/factory.bin := append-ubi | check-size $$$$(IMAGE_SIZE)
+          IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+        endef
+        TARGET_DEVICES += xiaomi_redmi-router-ax6000-110m
+        EOF
+
+        cat << 'EOF' > target/linux/mediatek/dts/mt7986a-xiaomi-redmi-router-ax6000-110m.dts
+        // SPDX-License-Identifier: (GPL-2.0 OR MIT)
+        /dts-v1/;
+        #include "mt7986a-xiaomi-redmi-router-ax6000.dtsi"
+        / {
+        	model = "Xiaomi Redmi Router AX6000 (hanwckf 110M layout)";
+        	compatible = "xiaomi,redmi-router-ax6000", "mediatek,mt7986a";
+        };
+        &spi_nand_flash {
+        	mediatek,nmbm;
+        	mediatek,bmt-max-ratio = <1>;
+        	mediatek,bmt-max-reserved-blocks = <64>;
+        };
+        &partitions {
+        	partition@580000 {
+        		label = "crash";
+        		reg = <0x580000 0x40000>;
+        		read-only;
+        	};
+        	partition@5c0000 {
+        		label = "crash_log";
+        		reg = <0x5c0000 0x40000>;
+        		read-only;
+        	};
+        	partition@600000 {
+        		label = "ubi";
+        		reg = <0x600000 0x6e00000>;
+        	};
+        };
+        EOF
+        echo "✅ AX6000 110M 大分区适配代码补丁应用成功！"
+        
+    - name: Update & Install feeds
+      working-directory: /builder/openwrt
+      run: |
+        ./scripts/feeds update -a        
+        ./scripts/feeds install -a
+
+    - name: Load Custom Configuration
+      run: |
+        [ -e .config ] && cp .config /builder/openwrt/.config
+
+    - name: Download package
+      working-directory: /builder/openwrt
+      run: |
+        make defconfig
+        make download -j8
+        find package -name "dl" -description "NotFound" -exec rm -rf {} +
+
+    - name: Compile the firmware
+      working-directory: /builder/openwrt
+      run: |
+        echo -e "$(nproc) thread compile"
+        make -j$(nproc) || make -j1 || make -j1 V=s
+
+    - name: Organize files
+      run: |
+        cd /builder/openwrt/bin/targets/*/*
+        rm -rf packages
+        echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
+
+    - name: Upload firmware directory
+      uses: actions/upload-artifact@v4
+      with:
+        name: ImmortalWrt_Redmi_AX6000_110M
+        path: ${{ env.FIRMWARE_PATH }}
