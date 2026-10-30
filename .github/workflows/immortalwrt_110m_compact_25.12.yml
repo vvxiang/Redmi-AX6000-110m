@@ -92,7 +92,7 @@ jobs:
         git clone -b openwrt-25.12 --single-branch --filter=blob:none $REPO_URL /builder/openwrt || { echo 'Git clone failed!'; exit 1; }
         
         # ======== 编译下方插件，请先去掉注释 ======== 
-        cd /builder/openwrt   
+        #cd /builder/openwrt   
         
         # ======== 编译 OpenClash 最新版 =========
         # immortalwrt 插件库已经包含 OpenClash，若源码被删除或编译 OpenClash 最新版，使用以下命令自行编译，打开 immortalwrt官方插件库查询：https://github.com/immortalwrt/immortalwrt（选择 openwrt-25.12分支，打开 feeds.conf.default文件，再打开luci仓库找到“applications”查询插件）
