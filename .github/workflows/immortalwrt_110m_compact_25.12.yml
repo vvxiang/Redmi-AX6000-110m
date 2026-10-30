@@ -92,19 +92,19 @@ jobs:
         git clone -b openwrt-25.12 --single-branch --filter=blob:none $REPO_URL /builder/openwrt || { echo 'Git clone failed!'; exit 1; }
         
         # ======== 编译下方插件，请先去掉注释 ======== 
-        cd /builder/openwrt   
+        #cd /builder/openwrt   
         
         # ======== 编译 OpenClash 最新版 =========
         # immortalwrt 插件库已经包含 OpenClash，若源码被删除或编译 OpenClash 最新版，使用以下命令自行编译，打开 immortalwrt官方插件库查询：https://github.com/immortalwrt/immortalwrt（选择 openwrt-25.12分支，打开 feeds.conf.default文件，再打开luci仓库找到“applications”查询插件）
-        sed -i '1i src-git openclash https://github.com/vernesong/OpenClash.git;master' ./feeds.conf.default
+       # sed -i '1i src-git openclash https://github.com/vernesong/OpenClash.git;master' ./feeds.conf.default
         
         # ======== 编译 passwall 最新版 =========
         # immortalwrt插件库已经包含 passwall，若源码被删除或编译 Passwall 最新版，使用以下命令自行编译，打开 immortalwrt官方插件库查询：https://github.com/immortalwrt/immortalwrt（选择 openwrt-25.12分支，打开 feeds.conf.default文件，再打开luci仓库找到“applications”查询插件）
         # 编译 passwall_luci，去掉下面注释，此命令会在 feeds.conf.default文件，第 1 行插入 passwall_luci
-        sed -i '1i src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main' ./feeds.conf.default
+       # sed -i '1i src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main' ./feeds.conf.default
 
         # 编译 passwall_packages，再次在 feeds.conf.default文件，第 1 行插入 passwall_packages (这样 packages 就变成了第 1 行，luci 变成了第 2 行)
-        sed -i '1i src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main' ./feeds.conf.default
+       # sed -i '1i src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main' ./feeds.conf.default
         
         # ======== 编译 passwall2 最新版 =========
         # 编译 passwall2_luci，不要和 passwall_luci 一起编译，编译出来的固件会不稳定，第 1 行插入 passwall2_luci
