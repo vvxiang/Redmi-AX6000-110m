@@ -181,12 +181,17 @@ jobs:
       run: |
         ./scripts/feeds install -a
         
+        # ====== 强制指定备用握手服务器与端口，绕过 GitHub 流量拦截 ======
     - name: Setup tmate session (make menuconfig)
       uses: mxschmitt/action-tmate@v3
       if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
       timeout-minutes: 30
       with:
-        limit-access-to-actor: false # 允许通过 Web 链接直接免密访问（方便浏览器操作）
+        limit-access-to-actor: false
+        # 以下两个参数是破局关键：强制使用 443 网页标准端口进行 SSH 握手，极难被拦截
+        tmate-server-host: pair.tmate.io
+        tmate-server-port: 443
+
 
       env:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
