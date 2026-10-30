@@ -180,10 +180,14 @@ jobs:
       working-directory: /builder/openwrt
       run: |
         ./scripts/feeds install -a
-
-    - name: SSH connection to Actions (make menuconfig)
-      uses: P3TERX/ssh2actions@main
+        
+    - name: Setup tmate session (make menuconfig)
+      uses: mxschmitt/action-tmate@v3
       if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
+      timeout-minutes: 30
+      with:
+        limit-access-to-actor: false # 允许通过 Web 链接直接免密访问（方便浏览器操作）
+
       env:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
