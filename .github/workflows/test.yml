@@ -132,8 +132,8 @@ jobs:
       run: |
         make defconfig
         make download -j8
-        find package -name "dl" -description "NotFound" -exec rm -rf {} +
-
+       # find package -name "dl" -description "NotFound" -exec rm -rf {} +
+        find package -name "dl" -type d -exec rm -rf {} +
     - name: Compile the firmware
       working-directory: /builder/openwrt
       run: |
