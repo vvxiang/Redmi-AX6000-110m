@@ -97,12 +97,12 @@ jobs:
         
         echo "✅ PassWall 与 OpenClash 官方最新源追加成功！"
     # ====================================================================================
-    - name: Clone source code
-      env:
-        REPO_URL: https://github.com/immortalwrt/immortalwrt
-      run: |
+  #  - name: Clone source code
+  ##     env:
+    #    REPO_URL: https://github.com/immortalwrt/immortalwrt
+     # run: |
         # 拉取 immortalwrt 官方 openwrt-25.12 分支
-        git clone -b openwrt-25.12 --single-branch --filter=blob:none $REPO_URL /builder/openwrt || { echo 'Git clone failed!'; exit 1; }
+      #  git clone -b openwrt-25.12 --single-branch --filter=blob:none $REPO_URL /builder/openwrt || { echo 'Git clone failed!'; exit 1; }
         
         # ======== 编译下方插件，请先去掉注释 ======== 
         #cd /builder/openwrt   
