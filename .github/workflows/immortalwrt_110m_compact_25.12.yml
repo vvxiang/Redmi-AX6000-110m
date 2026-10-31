@@ -54,6 +54,8 @@ jobs:
       run: |
         sudo -E apt-get -qq update
         sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+        # 强行补充 pahole 和 zstd，确保 DAE 的 BTF 内核可以顺利编译成功
+        sudo apt-get install -y pahole zstd
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo rm -rf /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc /usr/share/dotnet /usr/local/graalvm /usr/local/.ghcup \
@@ -194,10 +196,6 @@ jobs:
       run: |
         ./scripts/feeds install -a
 
-    - name: Install feeds
-      working-directory: /builder/openwrt
-      run: |
-        ./scripts/feeds install -a
 
        # ======== 编译 OpenClash 最新版（使用 package 编译法）不推荐 =========
        # OpenClash 推荐使用上方写入 ./feeds.conf.default 编译法
