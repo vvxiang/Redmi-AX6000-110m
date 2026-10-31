@@ -78,7 +78,25 @@ jobs:
     - name: Check Space
       run: |
         df -h
+ # ==================== 把代码放在这里（直接替换原本的 Clone 步骤） ====================
+    - name: Clone source code & Configure Feeds
+      env:
+        REPO_URL: https://github.com
+      run: |
+        # 拉取源码并切换至正确目录
+        git clone -b openwrt-25.12 --single-branch --filter=blob:none $REPO_URL /builder/openwrt || { echo 'Git clone failed!'; exit 1; }
+        cd /builder/openwrt   
+        
+        # 清理潜在的内置冲突
+        rm -rf package/feeds/luci/luci-app-passwall package/feeds/packages/passwall package/feeds/luci/luci-app-openclash
 
+        # 追加 PassWall 与 OpenClash 官方最新源
+        echo "src-git passwall_packages https://github.com" >> ./feeds.conf.default
+        echo "src-git passwall_luci https://github.com" >> ./feeds.conf.default
+        echo "src-git openclash https://github.com" >> ./feeds.conf.default
+        
+        echo "✅ PassWall 与 OpenClash 官方最新源追加成功！"
+    # ====================================================================================
     - name: Clone source code
       env:
         REPO_URL: https://github.com/immortalwrt/immortalwrt
