@@ -81,7 +81,7 @@ jobs:
  # ==================== 把代码放在这里（直接替换原本的 Clone 步骤） ====================
     - name: Clone source code & Configure Feeds
       env:
-        REPO_URL: https://github.com
+        REPO_URL:  https://github.com/immortalwrt/immortalwrt
       run: |
         # 拉取源码并切换至正确目录
         git clone -b openwrt-25.12 --single-branch --filter=blob:none $REPO_URL /builder/openwrt || { echo 'Git clone failed!'; exit 1; }
