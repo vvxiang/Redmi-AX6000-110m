@@ -8,12 +8,25 @@
 
 name: immortalwrt_110m_compact_25.12
 
+# Add a button to trigger the workflow
 on:
   repository_dispatch:
   workflow_dispatch:
+  #  inputs:
+  #    ssh:
+ #       description: 'SSH connection to Actions'
+ #       required: false
+ #       default: 'true'
 
+  #schedule:
+    # UTC 时间对应北京时间（UTC+8=北京时间）：7月20日，早上5点10分 开始编译
+    #- cron: '10 21 19 7 *'  
+    # UTC 时间对应北京时间：每月2、9、16、23日，早上5点10分 开始编译    
+    #- cron: '10 21 1,8,15,22 * *'
+    
 jobs:
   build:
+    # 建议 immortalwrt 使用低版本，更容易编译成功
     runs-on: ubuntu-22.04
 
     steps:
@@ -37,8 +50,9 @@ jobs:
         df -hT
 
     - name: Checkout repository
-      uses: actions/checkout@v4        
+      uses: actions/checkout@v7        
 
+    # 如果“Initialization environment”报错，是因为官方 APT 设置依赖项的脚本已经不合时宜，在官方修正之前，请使用下方的代码
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -50,25 +64,74 @@ jobs:
         sudo rm -rf /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc /usr/share/dotnet /usr/local/graalvm /usr/local/.ghcup \
         /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules
         sudo timedatectl set-timezone "Asia/Shanghai"
+        sudo chown $USER:$GROUPS $GITHUB_WORKSPACE
 
+    # 使用此代码前，请先更新依赖包的命令：https://github.com/sky2016cn/AutoBuild-lede（依赖包仓库） 
+    #- name: Initialization environment
+    #  env:
+    #    DEBIAN_FRONTEND: noninteractive
+    #  run: |  
+    #    sudo -E apt-get -qq update
+    #    sudo -E apt-get -qq install $(curl -fsSL raw.githubusercontent.com/sky2016cn/OpenWrt-Depends/main/depends-immortalwrt)
+    #    sudo -E apt-get -qq autoremove --purge
+    #    sudo -E apt-get -qq clean
+    #    sudo rm -rf /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc /usr/share/dotnet /usr/local/graalvm /usr/local/.ghcup \
+    #    /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules
+    #    sudo timedatectl set-timezone "Asia/Shanghai"
+    #    sudo chown $USER:$GROUPS $GITHUB_WORKSPACE
+        
     - name: Check Space
-      run: df -h
+      run: |
+        df -h
 
     - name: Clone source code
       env:
         REPO_URL: https://github.com/immortalwrt/immortalwrt
       run: |
+        # 拉取 immortalwrt 官方 openwrt-25.12 分支
         git clone -b openwrt-25.12 --single-branch --filter=blob:none $REPO_URL /builder/openwrt || { echo 'Git clone failed!'; exit 1; }
+        
+        # ======== 编译下方插件，请先去掉注释 ======== 
+        #cd /builder/openwrt   
+        
+        # ======== 编译 OpenClash 最新版 =========
+        # immortalwrt 插件库已经包含 OpenClash，若源码被删除或编译 OpenClash 最新版，使用以下命令自行编译，打开 immortalwrt官方插件库查询：https://github.com/immortalwrt/immortalwrt（选择 openwrt-25.12分支，打开 feeds.conf.default文件，再打开luci仓库找到“applications”查询插件）
+       # sed -i '1i src-git openclash https://github.com/vernesong/OpenClash.git;master' ./feeds.conf.default
+        
+        # ======== 编译 passwall 最新版 =========
+        # immortalwrt插件库已经包含 passwall，若源码被删除或编译 Passwall 最新版，使用以下命令自行编译，打开 immortalwrt官方插件库查询：https://github.com/immortalwrt/immortalwrt（选择 openwrt-25.12分支，打开 feeds.conf.default文件，再打开luci仓库找到“applications”查询插件）
+        # 编译 passwall_luci，去掉下面注释，此命令会在 feeds.conf.default文件，第 1 行插入 passwall_luci
+        #sed -i '1i src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main' ./feeds.conf.default
+
+        # 编译 passwall_packages，再次在 feeds.conf.default文件，第 1 行插入 passwall_packages (这样 packages 就变成了第 1 行，luci 变成了第 2 行)
+        #sed -i '1i src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main' ./feeds.conf.default
+
+# 切换到源码目录
         cd /builder/openwrt   
         
-        # 注入 OpenClash 与 Passwall 最新版源码源
-       # sed -i '1i src-git openclash https://github.com/vernesong/OpenClash.git;master' ./feeds.conf.default
-       # sed -i '1i src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main' ./feeds.conf.default
-      #  sed -i '1i src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main' ./feeds.conf.default
+        # ======== 强力清理潜在的内置冲突（如果有） ========
+        # 清理旧的 PassWall
+        rm -rf package/feeds/luci/luci-app-passwall
+        rm -rf package/feeds/packages/passwall
+        
+        # 清理旧的 OpenClash
+        rm -rf package/feeds/luci/luci-app-openclash
 
+        # ======== 编译 passwall 最新版 (使用追加法防错) =========
+        echo "src-git passwall_packages https://github.com" >> ./feeds.conf.default
+        echo "src-git passwall_luci https://github.com" >> ./feeds.conf.default
+
+        # ======== 编译 OpenClash 最新版 (使用追加法防错) =========
+        echo "src-git openclash https://github.com" >> ./feeds.conf.default
+        
+        # ======== 编译 passwall2 最新版 =========
+        # 编译 passwall2_luci，不要和 passwall_luci 一起编译，编译出来的固件会不稳定，第 1 行插入 passwall2_luci
+        #sed -i '1i src-git passwall2_luci https://github.com/Openwrt-Passwall/openwrt-passwall2.git;main' ./feeds.conf.default
+        # ========= 添加 immortalwrt 110m 大分区代码 =========
     - name: Apply AX6000 110M Layout Modifications
       working-directory: /builder/openwrt
       run: |
+        # 1. 在 filogic.mk 末尾追加 Device（红米AX6000 设备定义）
         cat << 'EOF' >> target/linux/mediatek/image/filogic.mk
 
         define Device/xiaomi_redmi-router-ax6000-110m
@@ -85,69 +148,136 @@ jobs:
         TARGET_DEVICES += xiaomi_redmi-router-ax6000-110m
         EOF
 
+        # 2. 创建全新的 immortalwrt 110m大分区 DTS 设备树文件
         cat << 'EOF' > target/linux/mediatek/dts/mt7986a-xiaomi-redmi-router-ax6000-110m.dts
         // SPDX-License-Identifier: (GPL-2.0 OR MIT)
+
         /dts-v1/;
         #include "mt7986a-xiaomi-redmi-router-ax6000.dtsi"
+
         / {
         	model = "Xiaomi Redmi Router AX6000 (hanwckf 110M layout)";
         	compatible = "xiaomi,redmi-router-ax6000", "mediatek,mt7986a";
         };
+
         &spi_nand_flash {
         	mediatek,nmbm;
         	mediatek,bmt-max-ratio = <1>;
         	mediatek,bmt-max-reserved-blocks = <64>;
         };
+
         &partitions {
         	partition@580000 {
         		label = "crash";
         		reg = <0x580000 0x40000>;
         		read-only;
         	};
+
         	partition@5c0000 {
         		label = "crash_log";
         		reg = <0x5c0000 0x40000>;
         		read-only;
         	};
+
         	partition@600000 {
         		label = "ubi";
         		reg = <0x600000 0x6e00000>;
         	};
         };
         EOF
+
         echo "✅ AX6000 110M 大分区适配代码补丁应用成功！"
         
-    - name: Update & Install feeds
+    - name: Update feeds
       working-directory: /builder/openwrt
       run: |
         ./scripts/feeds update -a        
+
+    - name: Install feeds
+      working-directory: /builder/openwrt
+      run: |
         ./scripts/feeds install -a
 
-    - name: Load Custom Configuration
-      run: |
-        [ -e .config ] && cp .config /builder/openwrt/.config
 
+      env:
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+    #- name: Install feeds
+     # working-directory: /builder/openwrt
+    #  run: |
+      #  ./scripts/feeds install -a
+
+       # ======== 编译 OpenClash 最新版（使用 package 编译法）不推荐 =========
+       # OpenClash 推荐使用上方写入 ./feeds.conf.default 编译法
+       # immortalwrt 插件库已经包含 OpenClash，若源码被删除或编译 OpenClash 最新版，使用以下命令自行编译，打开 immortalwrt官方插件库查询：https://github.com/immortalwrt/immortalwrt（选择 openwrt-25.12分支，打开 feeds.conf.default文件，再打开luci仓库找到“applications”查询插件）
+    - name: Import Official Recommended OpenClash
+      working-directory: /builder/openwrt
+      run: |
+        # 移除 openwrt feeds 自带的核心库，
+        #rm -rf package/luci-app-openclash
+       # rm -rf feeds/luci/applications/luci-app-openclash
+
+        # 克隆 OpenClash 最新版
+        #git clone --depth=1 https://github.com/vernesong/OpenClash.git /tmp/OpenClash
+
+        # 只移动 luci-app-openclash 软件包到 package 目录下
+       # mv /tmp/OpenClash/luci-app-openclash package/
+
+        # 删除临时目录
+       # rm -rf /tmp/OpenClash
+    
+    # 范例 1: 添加源码中没有的第三方插件，必须放在 feeds命令之后，注意拉取命令的保存路径，打开 immortalwrt官方插件库查询：https://github.com/immortalwrt/immortalwrt（选择 openwrt-25.12分支，打开 feeds.conf.default文件，再打开luci仓库找到“applications”查询插件）
+    #- name: Import external feeds - OpenAppFilter
+    #  working-directory: /builder/openwrt
+    #  run: |
+    #    git clone https://github.com/destan19/OpenAppFilter.git package/OpenAppFilter
+    
+    - name: Configuration Customization - Build_ax6000_immortalwrt_110m_compact_25.12
+      env:
+        CONFIG_FILE: 'ax6000_immortalwrt_110m_compact.config'
+      run: |
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE /builder/openwrt/.config
+        chmod +x ./customize_immortalwrt.sh && ./customize_immortalwrt.sh
+        cd /builder/openwrt && make defconfig
+        
     - name: Download package
       working-directory: /builder/openwrt
       run: |
-        make defconfig
-        make download -j8
-        #find package -name "dl" -description "NotFound" -exec rm -rf {} +
-        find package -name "dl" -type d -exec rm -rf {} +
-    - name: Compile the firmware
+        make download -j$(nproc)
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: Build firmware
       working-directory: /builder/openwrt
       run: |
-        echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        echo -e "$(nproc) thread build."
+        # 先尝试多线程全速编译，如果失败（返回非 0 状态码），则触发单线程编译，并打印最详细的 V=s 日志
+        make -j$(nproc) || make -j1 V=s
 
-    - name: Organize files
+    - name: Check Space
       run: |
-        cd /builder/openwrt/bin/targets/*/*
-        rm -rf packages
-        echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
-
-    - name: Upload firmware directory
-      uses: actions/upload-artifact@v4
+        df -h
+        
+    - name: Upload artifact
+      uses: actions/upload-artifact@v7
       with:
-        name: ImmortalWrt_Redmi_AX6000_110M
-        path: ${{ env.FIRMWARE_PATH }}
+        name: ax6000_immortalwrt_110m_compact_25.12
+        path: /builder/openwrt/bin
+        
+    - name: Generate build date tag
+      run: |
+        echo "BUILD_DATE=$(TZ=Asia/Shanghai date +%Y%m%d-%H%M%S)" >> $GITHUB_ENV
+    
+    - name: Create Release
+      if: success()
+      uses: softprops/action-gh-release@v3  # v2升级v3，直接解决Node20弃用警告
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ env.BUILD_DATE }}
+        name: RedmiAX6000_110m_Compact_25.12_${{ env.BUILD_DATE }}
+        generate_release_notes: true
+        files: |
+          /builder/openwrt/bin/targets/mediatek/filogic/*.bin
+          /builder/openwrt/bin/targets/mediatek/filogic/*.manifest
+          /builder/openwrt/bin/targets/mediatek/filogic/*.json
