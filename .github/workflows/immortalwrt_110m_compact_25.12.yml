@@ -214,17 +214,17 @@ jobs:
       working-directory: /builder/openwrt
       run: |
         # 移除 openwrt feeds 自带的核心库，
-        rm -rf package/luci-app-openclash
-        rm -rf feeds/luci/applications/luci-app-openclash
+        #rm -rf package/luci-app-openclash
+       # rm -rf feeds/luci/applications/luci-app-openclash
 
         # 克隆 OpenClash 最新版
-        git clone --depth=1 https://github.com/vernesong/OpenClash.git /tmp/OpenClash
+        #git clone --depth=1 https://github.com/vernesong/OpenClash.git /tmp/OpenClash
 
         # 只移动 luci-app-openclash 软件包到 package 目录下
-        mv /tmp/OpenClash/luci-app-openclash package/
+       # mv /tmp/OpenClash/luci-app-openclash package/
 
         # 删除临时目录
-        rm -rf /tmp/OpenClash
+       # rm -rf /tmp/OpenClash
     
     # 范例 1: 添加源码中没有的第三方插件，必须放在 feeds命令之后，注意拉取命令的保存路径，打开 immortalwrt官方插件库查询：https://github.com/immortalwrt/immortalwrt（选择 openwrt-25.12分支，打开 feeds.conf.default文件，再打开luci仓库找到“applications”查询插件）
     #- name: Import external feeds - OpenAppFilter
