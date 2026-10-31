@@ -101,15 +101,18 @@ jobs:
         # ======== 编译 passwall 最新版 =========
         # immortalwrt插件库已经包含 passwall，若源码被删除或编译 Passwall 最新版，使用以下命令自行编译，打开 immortalwrt官方插件库查询：https://github.com/immortalwrt/immortalwrt（选择 openwrt-25.12分支，打开 feeds.conf.default文件，再打开luci仓库找到“applications”查询插件）
         # 编译 passwall_luci，去掉下面注释，此命令会在 feeds.conf.default文件，第 1 行插入 passwall_luci
-       # sed -i '1i src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main' ./feeds.conf.default
+        #sed -i '1i src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main' ./feeds.conf.default
 
         # 编译 passwall_packages，再次在 feeds.conf.default文件，第 1 行插入 passwall_packages (这样 packages 就变成了第 1 行，luci 变成了第 2 行)
-       # sed -i '1i src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main' ./feeds.conf.default
+        #sed -i '1i src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main' ./feeds.conf.default
+
+        # ======== 编译 passwall 最新版 (使用追加法防错) =========
+        echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> ./feeds.conf.default
+        echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> ./feeds.conf.default
         
         # ======== 编译 passwall2 最新版 =========
         # 编译 passwall2_luci，不要和 passwall_luci 一起编译，编译出来的固件会不稳定，第 1 行插入 passwall2_luci
         #sed -i '1i src-git passwall2_luci https://github.com/Openwrt-Passwall/openwrt-passwall2.git;main' ./feeds.conf.default
-
         # ========= 添加 immortalwrt 110m 大分区代码 =========
     - name: Apply AX6000 110M Layout Modifications
       working-directory: /builder/openwrt
@@ -193,21 +196,21 @@ jobs:
        # ======== 编译 OpenClash 最新版（使用 package 编译法）不推荐 =========
        # OpenClash 推荐使用上方写入 ./feeds.conf.default 编译法
        # immortalwrt 插件库已经包含 OpenClash，若源码被删除或编译 OpenClash 最新版，使用以下命令自行编译，打开 immortalwrt官方插件库查询：https://github.com/immortalwrt/immortalwrt（选择 openwrt-25.12分支，打开 feeds.conf.default文件，再打开luci仓库找到“applications”查询插件）
-    #- name: Import Official Recommended OpenClash
-    #  working-directory: /builder/openwrt
-    #  run: |
+    - name: Import Official Recommended OpenClash
+      working-directory: /builder/openwrt
+      run: |
         # 移除 openwrt feeds 自带的核心库，
-    #    rm -rf package/luci-app-openclash
-    #    rm -rf feeds/luci/applications/luci-app-openclash
+        rm -rf package/luci-app-openclash
+        rm -rf feeds/luci/applications/luci-app-openclash
 
         # 克隆 OpenClash 最新版
-    #    git clone --depth=1 https://github.com/vernesong/OpenClash.git /tmp/OpenClash
+        git clone --depth=1 https://github.com/vernesong/OpenClash.git /tmp/OpenClash
 
         # 只移动 luci-app-openclash 软件包到 package 目录下
-    #    mv /tmp/OpenClash/luci-app-openclash package/
+        mv /tmp/OpenClash/luci-app-openclash package/
 
         # 删除临时目录
-    #    rm -rf /tmp/OpenClash
+        rm -rf /tmp/OpenClash
     
     # 范例 1: 添加源码中没有的第三方插件，必须放在 feeds命令之后，注意拉取命令的保存路径，打开 immortalwrt官方插件库查询：https://github.com/immortalwrt/immortalwrt（选择 openwrt-25.12分支，打开 feeds.conf.default文件，再打开luci仓库找到“applications”查询插件）
     #- name: Import external feeds - OpenAppFilter
