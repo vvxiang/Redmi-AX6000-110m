@@ -91,9 +91,9 @@ jobs:
         rm -rf package/feeds/luci/luci-app-passwall package/feeds/packages/passwall package/feeds/luci/luci-app-openclash
 
         # 追加 PassWall 与 OpenClash 官方最新源
-        echo "src-git passwall_packages https://github.com" >> ./feeds.conf.default
-        echo "src-git passwall_luci https://github.com" >> ./feeds.conf.default
-        echo "src-git openclash https://github.com" >> ./feeds.conf.default
+        echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> ./feeds.conf.default
+        echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> ./feeds.conf.default
+        echo "src-git openclash https://github.com/vernesong/OpenClash.git;master" >> ./feeds.conf.default
         
         echo "✅ PassWall 与 OpenClash 官方最新源追加成功！"
     # ====================================================================================
