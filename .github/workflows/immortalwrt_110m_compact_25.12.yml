@@ -106,9 +106,23 @@ jobs:
         # 编译 passwall_packages，再次在 feeds.conf.default文件，第 1 行插入 passwall_packages (这样 packages 就变成了第 1 行，luci 变成了第 2 行)
         #sed -i '1i src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main' ./feeds.conf.default
 
+# 切换到源码目录
+        cd /builder/openwrt   
+        
+        # ======== 强力清理潜在的内置冲突（如果有） ========
+        # 清理旧的 PassWall
+        rm -rf package/feeds/luci/luci-app-passwall
+        rm -rf package/feeds/packages/passwall
+        
+        # 清理旧的 OpenClash
+        rm -rf package/feeds/luci/luci-app-openclash
+
         # ======== 编译 passwall 最新版 (使用追加法防错) =========
-        echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> ./feeds.conf.default
-        echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> ./feeds.conf.default
+        echo "src-git passwall_packages https://github.com" >> ./feeds.conf.default
+        echo "src-git passwall_luci https://github.com" >> ./feeds.conf.default
+
+        # ======== 编译 OpenClash 最新版 (使用追加法防错) =========
+        echo "src-git openclash https://github.com" >> ./feeds.conf.default
         
         # ======== 编译 passwall2 最新版 =========
         # 编译 passwall2_luci，不要和 passwall_luci 一起编译，编译出来的固件会不稳定，第 1 行插入 passwall2_luci
