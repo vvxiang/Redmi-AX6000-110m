@@ -91,11 +91,15 @@ jobs:
         
         # 清理潜在的内置冲突
         rm -rf package/feeds/luci/luci-app-passwall package/feeds/packages/passwall package/feeds/luci/luci-app-openclash
-
+        # 强力抹除可能存在冲突的旧版、内置的 dae/daed 源码
+        rm -rf package/feeds/luci/luci-app-daed package/feeds/packages/daed package/feeds/packages/dae
+        
         # 追加 PassWall 与 OpenClash 官方最新源
         echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> ./feeds.conf.default
         echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> ./feeds.conf.default
         echo "src-git openclash https://github.com/vernesong/OpenClash.git;master" >> ./feeds.conf.default
+        # 4. 根据仓库信息，追加全新的一体化 daede 专属源
+        echo "src-git daede https://github.com/kenzok8/openwrt-daede.git;main" >> ./feeds.conf.default
         
         echo "✅ PassWall 与 OpenClash 官方最新源追加成功！"
     # ====================================================================================
