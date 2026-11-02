@@ -192,17 +192,18 @@ jobs:
         EOF
 
         echo "✅ AX6000 110M 大分区适配代码补丁应用成功！"
-        
-    - name: Update feeds
-      working-directory: /builder/openwrt
-      run: |
-        ./scripts/feeds update -a        
 
-    - name: Install feeds
-      working-directory: /builder/openwrt
-      run: |
-        ./scripts/feeds install -a
-
+     - name: Pre-set Root Password to password
+       run: |
+        cd openwrt
+        mkdir -p files/etc
+        cat << 'EOF' > files/etc/shadow
+        root:$1$wEr9Lx9S$1n7g8hXJK8mNp2rTv5Uv/:19845:0:99999:7:::
+        daemon:*:0:0:99999:7:::
+        ftp:*:0:0:99999:7:::
+        network:*:0:0:99999:7:::
+        nobody:*:0:0:99999:7:::
+        EOF
     #增加PPOE拨号    
     - name: Pre-configure PPPoE Credentials
       working-directory: /builder/openwrt
@@ -241,6 +242,22 @@ jobs:
         EOF
         
         echo "✅ PPPoE 账号密码已成功预置进编译文件系统中！"
+ 
+
+
+
+        
+    - name: Update feeds
+      working-directory: /builder/openwrt
+      run: |
+        ./scripts/feeds update -a        
+
+    - name: Install feeds
+      working-directory: /builder/openwrt
+      run: |
+        ./scripts/feeds install -a
+
+
 
 
        # ======== 编译 OpenClash 最新版（使用 package 编译法）不推荐 =========
