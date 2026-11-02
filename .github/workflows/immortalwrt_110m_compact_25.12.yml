@@ -239,17 +239,21 @@ jobs:
     - name: Generate build date tag
       run: |
         echo "BUILD_DATE=$(TZ=Asia/Shanghai date +%Y%m%d-%H%M%S)" >> $GITHUB_ENV
-    
+        
     - name: Create Release
       if: success()
-      uses: softprops/action-gh-release@v3  # v2升级v3，直接解决Node20弃用警告
+      uses: softprops/action-gh-release@v3
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ env.BUILD_DATE }}
-        name: RedmiAX6000_110m_Compact_25.12_${{ env.BUILD_DATE }}
+        # 使用你生成的时间戳作为 Tag 名（避免冒号报错）
+        tag_name: ${{ env.CUSTOM_TIME }}-${{ env.BUILD_DATE }}
+        # 2. 修改 Release 的标题（在最前面加入时间戳）
+        name: ${{ env.CUSTOM_TIME }}_RedmiAX6000_110m_Compact_25.12_${{ env.BUILD_DATE }}
         generate_release_notes: true
         files: |
           /builder/openwrt/bin/targets/mediatek/filogic/*.bin
           /builder/openwrt/bin/targets/mediatek/filogic/*.manifest
           /builder/openwrt/bin/targets/mediatek/filogic/*.json
+    
+  
