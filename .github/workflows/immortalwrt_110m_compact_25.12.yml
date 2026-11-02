@@ -203,6 +203,45 @@ jobs:
       run: |
         ./scripts/feeds install -a
 
+    #增加PPOE拨号    
+    - name: Pre-configure PPPoE Credentials
+      working-directory: /builder/openwrt
+      run: |
+        # 1. 创建默认网络配置文件覆盖路径
+        mkdir -p files/etc/config
+
+        # 2. 动态生成网络配置文件，预设 WAN 口为 PPPoE 拨号，并填入您的账号密码
+        cat << 'EOF' > files/etc/config/network
+        config interface 'loopback'
+        	option device 'lo'
+        	option proto 'static'
+        	option ipaddr '127.0.0.1'
+        	option netmask '255.0.0.0'
+
+        config globals 'globals'
+        	option ula_prefix 'fd00:db8:0:1::/64'
+
+        config interface 'lan'
+        	option device 'br-lan'
+        	option proto 'static'
+        	option ipaddr '192.168.1000.1'
+        	option netmask '255.255.255.0'
+        	option ip6assign '60'
+
+        config interface 'wan'
+        	option device 'eth1'
+        	option proto 'pppoe'
+        	option username '7311l7491306'
+        	option password '123456'
+        	option ipv6 'auto'
+
+        config interface 'wan6'
+        	option device 'eth1'
+        	option proto 'dhcpv6'
+        EOF
+        
+        echo "✅ PPPoE 账号密码已成功预置进编译文件系统中！"
+
 
        # ======== 编译 OpenClash 最新版（使用 package 编译法）不推荐 =========
        # OpenClash 推荐使用上方写入 ./feeds.conf.default 编译法
