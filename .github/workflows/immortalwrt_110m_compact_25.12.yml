@@ -247,9 +247,9 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         # 使用你生成的时间戳作为 Tag 名（避免冒号报错）
-        tag_name: ${{ env.CUSTOM_TIME }}-${{ env.BUILD_DATE }}
+        tag_name: ${{ env.BUILD_DATE }}
         # 2. 修改 Release 的标题（在最前面加入时间戳）
-        name: ${{ env.CUSTOM_TIME }}_RedmiAX6000_110m_Compact_25.12_${{ env.BUILD_DATE }}
+        name: RedmiAX6000_110m_Compact_25.12_${{ env.BUILD_DATE }}
         generate_release_notes: true
         files: |
           /builder/openwrt/bin/targets/mediatek/filogic/*.bin
