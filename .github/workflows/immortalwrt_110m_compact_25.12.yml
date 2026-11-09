@@ -191,7 +191,8 @@ jobs:
         EOF
         
         echo "✅ PPPoE 账号密码已成功预置进编译文件系统中！"
-     - name: Clean Up Conflicting and Broken Packages
+        
+    - name: Clean Up Conflicting and Broken Packages
       working-directory: /builder/openwrt
       run: |
         # 1. 强行先刷一次 feeds 索引，让本地建立起 smpackage 的文件夹结构
