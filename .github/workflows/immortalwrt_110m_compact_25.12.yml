@@ -208,9 +208,29 @@ jobs:
       env:
         CONFIG_FILE: 'ax6000_immortalwrt_110m_compact.config'
       run: |
-        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE /builder/openwrt/.config
-        chmod +x ./customize_immortalwrt.sh && ./customize_immortalwrt.sh
-        cd /builder/openwrt && make defconfig
+        # 1. 复制配置文件到 OpenWrt 编译目录
+        [ -e "$CONFIG_FILE" ] && cp "$CONFIG_FILE" /builder/openwrt/.config
+        
+        # 2. 给根目录下的两个自定义脚本赋予执行权限
+        [ -e "./customize_immortalwrt.sh" ] && chmod +x ./customize_immortalwrt.sh
+        [ -e "./customize.sh" ] && chmod +x ./customize.sh
+        
+        # 3. 核心：必须先切入到 openwrt 源码目录，再调用外部脚本执行，确保相对路径100%正确
+        cd /builder/openwrt
+        
+        if [ -e "$GITHUB_WORKSPACE/customize_immortalwrt.sh" ]; then
+          echo "🚀 正在执行 customize_immortalwrt.sh..."
+          $GITHUB_WORKSPACE/customize_immortalwrt.sh
+        fi
+        
+        if [ -e "$GITHUB_WORKSPACE/customize.sh" ]; then
+          echo "🚀 正在执行 customize.sh..."
+          $GITHUB_WORKSPACE/customize.sh
+        fi
+        
+        # 4. 刷新并根据脚本修改后的内容自动补全 .config 依赖
+        make defconfig
+        
         
     - name: Download package
       working-directory: /builder/openwrt
