@@ -185,6 +185,8 @@ jobs:
     
     - name: Configuration Customization - Build_ax6000_immortalwrt_110m_compact_25.12
       env:
+        PPPOE_USER: ${{ secrets.PPPOE_USER }}
+        PPPOE_PASS: ${{ secrets.PPPOE_PASS }}
         CONFIG_FILE: 'ax6000_immortalwrt_110m_compact.config'
       run: |
         # 1. 复制配置文件到 OpenWrt 编译目录
