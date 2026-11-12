@@ -43,6 +43,12 @@ uci set wireless.default_radio1.ssid='MT7968_AX6000_5G'
 uci set wireless.default_radio1.encryption='psk2+ccmp'
 uci set wireless.default_radio1.key='xwvv#642531'
 
+# 增加PPOE拨号
+uci set network.wan.proto='pppoe'
+uci set network.wan.username='${PPPOE_USER}'
+uci set network.wan.password='${PPPOE_PASS}'
+uci commit network
+
 uci commit network
 uci commit wireless
 exit 0
