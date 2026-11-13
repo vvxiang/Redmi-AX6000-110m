@@ -18,6 +18,10 @@ on:
     #- cron: '10 21 19 7 *'  
     # UTC 时间对应北京时间：每月2、9、16、23日，早上5点10分 开始编译    
     #- cron: '10 21 1,8,15,22 * *'
+
+env:
+  CCACHE_DIR: /builder/ccache
+  CCACHE_MAXSIZE: 2G
     
 jobs:
   build:
@@ -40,22 +44,19 @@ jobs:
 
     - name: Prepare Builder Directory
       run: |
-        sudo mkdir -p /builder
+        sudo mkdir -p /builder /builder/ccache
         sudo chown -R runner:runner /builder
         df -hT
 
     - name: Checkout repository
       uses: actions/checkout@v7        
 
-    # 如果“Initialization environment”报错，是因为官方 APT 设置依赖项的脚本已经不合时宜，在官方修正之前，请使用下方的代码
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo -E apt-get -qq update
-        sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
-        # 强行补充 pahole 和 zstd，确保 DAE 的 BTF 内核可以顺利编译成功
-        # sudo apt-get install -y pahole zstd
+        sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)' > /dev/null
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo rm -rf /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc /usr/share/dotnet /usr/local/graalvm /usr/local/.ghcup \
@@ -66,10 +67,10 @@ jobs:
     - name: Check Space
       run: |
         df -h
- # ==================== 把代码放在这里（直接替换原本的 Clone 步骤） ====================
+
     - name: Clone source code & Configure Feeds
       env:
-        REPO_URL:  https://github.com/immortalwrt/immortalwrt
+        REPO_URL: https://github.com/immortalwrt/immortalwrt
       run: |
         # 拉取源码并切换至正确目录
         git clone -b openwrt-25.12 --single-branch --filter=blob:none $REPO_URL /builder/openwrt || { echo 'Git clone failed!'; exit 1; }
@@ -84,15 +85,14 @@ jobs:
         echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> ./feeds.conf.default
         echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> ./feeds.conf.default
         echo "src-git openclash https://github.com/vernesong/OpenClash.git;master" >> ./feeds.conf.default
-        # 根据仓库信息，追加全新的一体化 daede 专属源
+        # 追加全新的一体化 daede 专属源
         echo "src-git daede https://github.com/kenzok8/openwrt-daede.git;main" >> ./feeds.conf.default
-        echo "✅ PassWall 与 OpenClash 官方最新源追加成功！"
-    # ====================================================================================
+        echo "✅ PassWall、OpenClash 与 daede 最新源追加成功！"
  
     - name: Apply AX6000 110M Layout Modifications
       working-directory: /builder/openwrt
       run: |
-        # 1. 在 filogic.mk 末尾追加 Device（红米AX6000 设备定义）
+        # 1. 在 filogic.mk 末尾追加 Device（仅保留 sysupgrade.bin，不生成 factory.bin）
         cat << 'EOF' >> target/linux/mediatek/image/filogic.mk
 
         define Device/xiaomi_redmi-router-ax6000-110m
@@ -102,9 +102,9 @@ jobs:
           SUPPORTED_DEVICES := xiaomi,redmi-router-ax6000
           IMAGE_SIZE := 112640k
           KERNEL_IN_UBI := 1
-          IMAGES := factory.bin sysupgrade.bin
-          IMAGE/factory.bin := append-ubi | check-size $$$$(IMAGE_SIZE)
+          IMAGES := sysupgrade.bin
           IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+         
         endef
         TARGET_DEVICES += xiaomi_redmi-router-ax6000-110m
         EOF
@@ -149,23 +149,38 @@ jobs:
 
         echo "✅ AX6000 110M 大分区适配代码补丁应用成功！"
 
-        
-    - name: Clean Up Conflicting and Broken Packages
+    - name: Update & Install feeds
       working-directory: /builder/openwrt
       run: |
-        # 1. 强行先刷一次 feeds 索引，让本地建立起 smpackage 的文件夹结构
-        ./scripts/feeds update -a      
-        
-    - name: Update feeds
-      working-directory: /builder/openwrt
-      run: |
-        ./scripts/feeds update -a        
+        # 静默更新与安装，避免控制台被大量无关信息刷屏
+        ./scripts/feeds update -a > /dev/null
+        ./scripts/feeds install -a > /dev/null
+        echo "✅ Feeds 更新与安装完成！"
 
-    - name: Install feeds
-      working-directory: /builder/openwrt
-      run: |
-        ./scripts/feeds install -a
+    # ==================== 新增：双重极速编译缓存 ====================
+    - name: Cache OpenWrt Toolchain
+      id: cache-toolchain
+      uses: actions/cache@v4
+      with:
+        path: |
+          /builder/openwrt/staging_dir/host
+          /builder/openwrt/staging_dir/hostpkg
+          /builder/openwrt/staging_dir/toolchain-*
+          /builder/openwrt/build_dir/host
+          /builder/openwrt/build_dir/hostpkg
+          /builder/openwrt/build_dir/toolchain-*
+        key: ${{ runner.os }}-toolchain-immortalwrt-25.12-${{ hashFiles('**/ax6000_immortalwrt_110m_compact.config') }}
+        restore-keys: |
+          ${{ runner.os }}-toolchain-immortalwrt-25.12-
 
+    - name: Cache ccache
+      uses: actions/cache@v4
+      with:
+        path: /builder/ccache
+        key: ${{ runner.os }}-ccache-ax6000-${{ github.run_id }}
+        restore-keys: |
+          ${{ runner.os }}-ccache-ax6000-
+    # ================================================================
     
     - name: Configuration Customization - Build_ax6000_immortalwrt_110m_compact_25.12
       env:
@@ -180,7 +195,7 @@ jobs:
         [ -e "./customize_immortalwrt.sh" ] && chmod +x ./customize_immortalwrt.sh
         [ -e "./customize.sh" ] && chmod +x ./customize.sh
         
-        # 3. 核心：必须先切入到 openwrt 源码目录，再调用外部脚本执行，确保相对路径100%正确
+        # 3. 切入到 openwrt 源码目录执行外部脚本
         cd /builder/openwrt
         
         if [ -e "$GITHUB_WORKSPACE/customize_immortalwrt.sh" ]; then
@@ -192,10 +207,22 @@ jobs:
           echo "🚀 正在执行 customize.sh..."
           $GITHUB_WORKSPACE/customize.sh
         fi
+
+        # 4. 强制开启 ccache、禁用 Rust 编译（防 OOM），并关闭多余安装包制作以提速
+        cat << 'EOF' >> /builder/openwrt/.config
+        CONFIG_CCACHE=y
+        # CONFIG_RUST_HOST_BUILD is not set
+        # CONFIG_PACKAGE_rust is not set
+        # CONFIG_ALL is not set
+        # CONFIG_ALL_KMODS is not set
+        # CONFIG_ALL_NONSHARED is not set
+        # CONFIG_TARGET_ROOTFS_TARGZ is not set
+        # CONFIG_TARGET_ROOTFS_EXT4FS is not set
+        # CONFIG_TARGET_ROOTFS_INITRAMFS is not set
+        EOF
         
-        # 4. 刷新并根据脚本修改后的内容自动补全 .config 依赖
+        # 5. 刷新并自动补全 .config 依赖
         make defconfig
-        
         
     - name: Download package
       working-directory: /builder/openwrt
@@ -208,18 +235,41 @@ jobs:
       working-directory: /builder/openwrt
       run: |
         echo -e "$(nproc) thread build."
-        # 先尝试多线程全速编译，如果失败（返回非 0 状态码），则触发单线程编译，并打印最详细的 V=s 日志
-        make -j$(nproc) || make -j1 V=s
+        # 刷新恢复缓存后的文件时间戳，确保 100% 命中缓存不重编工具链
+        find /builder/openwrt/staging_dir /builder/openwrt/build_dir -exec touch -c {} + 2>/dev/null || true
 
-    - name: Check Space
+        # 多线程静默编译；若失败则单线程编译并将完整日志存入 build.log，屏幕仅打印最后 150 行防止日志截断
+        if ! make -j$(nproc); then
+          echo "❌ 多线程编译失败，正在单线程定位具体报错..."
+          make -j1 V=s > build.log 2>&1 || {
+            echo "================ 报错关键日志 ================"
+            tail -n 150 build.log
+            exit 1
+          }
+        fi
+        ccache -s || true
+
+    - name: Upload build log on failure
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: build-error-log
+        path: /builder/openwrt/build.log
+
+    - name: Check Space & Extract Target Firmware
       run: |
         df -h
+        mkdir -p /builder/output
+        # 仅复制唯一的 sysupgrade.bin 固件到输出目录
+        cp -f /builder/openwrt/bin/targets/mediatek/filogic/*redmi-router-ax6000-110m-squashfs-sysupgrade.bin /builder/output/
+        ls -lh /builder/output/
         
     - name: Upload artifact
       uses: actions/upload-artifact@v7
       with:
         name: ax6000_immortalwrt_110m_compact_25.12
-        path: /builder/openwrt/bin
+        # 仅上传这一个 sysupgrade.bin 文件
+        path: /builder/output/*redmi-router-ax6000-110m-squashfs-sysupgrade.bin
         
     - name: Generate build date tag
       run: |
@@ -231,14 +281,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        # 使用你生成的时间戳作为 Tag 名（避免冒号报错）
         tag_name: ${{ env.BUILD_DATE }}
-        # 2. 修改 Release 的标题（在最前面加入时间戳）
         name: RedmiAX6000_110m_Compact_25.12_${{ env.BUILD_DATE }}
         generate_release_notes: true
-        files: |
-          /builder/openwrt/bin/targets/mediatek/filogic/*.bin
-          /builder/openwrt/bin/targets/mediatek/filogic/*.manifest
-          /builder/openwrt/bin/targets/mediatek/filogic/*.json
-    
-  
+        # 仅发布这一个 sysupgrade.bin 文件
