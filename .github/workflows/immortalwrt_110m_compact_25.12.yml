@@ -86,10 +86,6 @@ jobs:
         echo "src-git openclash https://github.com/vernesong/OpenClash.git;master" >> ./feeds.conf.default
         # 根据仓库信息，追加全新的一体化 daede 专属源
         echo "src-git daede https://github.com/kenzok8/openwrt-daede.git;main" >> ./feeds.conf.default
-
-        #打包
-        echo "src-git smpackage https://github.com/kenzok8/small-package" >> ./feeds.conf.default
-        
         echo "✅ PassWall 与 OpenClash 官方最新源追加成功！"
     # ====================================================================================
  
