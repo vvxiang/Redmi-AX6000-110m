@@ -154,19 +154,7 @@ jobs:
       working-directory: /builder/openwrt
       run: |
         # 1. 强行先刷一次 feeds 索引，让本地建立起 smpackage 的文件夹结构
-        ./scripts/feeds update -a
-        
-        # 2. 物理擦除 504 报错的 clashoo 系列，防止因外部服务器超时中断编译
-        rm -rf feeds/smpackage/clashoo
-        rm -rf feeds/smpackage/luci-app-clashoo
-        rm -rf feeds/smpackage/mihomo
-        
-        # 3. 遵照作者官方 Readme 指引，物理删除 smpackage 内与 ImmortalWrt 官方原生内核冲突的所有底层垃圾包
-        # 这一步极其重要，能绝对规避编译中后期的 “Recursive dependency” 循环依赖报错
-        cd feeds/smpackage
-        rm -rf base-files dnsmasq firewall* fullconenat libnftnl nftables ppp opkg ucl upx vsftpd* miniupnpd-iptables wireless-regdb
-        
-        echo "✅ 所有超时报错和核心冲突的冗余组件已被物理降维打击！"
+        ./scripts/feeds update -a      
         
     - name: Update feeds
       working-directory: /builder/openwrt
