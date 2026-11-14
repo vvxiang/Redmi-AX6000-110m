@@ -13,8 +13,11 @@ sed -i 's/ImmortalWrt/ImmortalWrt/g' /builder/openwrt/package/base-files/files/b
 mkdir -p /builder/openwrt/files/usr/share/v2ray
 mkdir -p /builder/openwrt/files/usr/share/daed
 
-curl -fsSL "https://github.com" -o /builder/openwrt/files/usr/share/v2ray/geoip.dat
-curl -fsSL "https://github.com" -o /builder/openwrt/files/usr/share/v2ray/geosite.dat
+DAT_HOST="https://github.com/Loyalsoldier"
+DAT_REPO="v2ray-rules-dat/releases/latest/download"
+
+curl -fsSL "${DAT_HOST}/${DAT_REPO}/geoip.dat" -o /builder/openwrt/files/usr/share/v2ray/geoip.dat
+curl -fsSL "${DAT_HOST}/${DAT_REPO}/geosite.dat" -o /builder/openwrt/files/usr/share/v2ray/geosite.dat
 
 # 创建软链接映射给 daed (零额外空间占用)
 ln -sf /usr/share/v2ray/geoip.dat /builder/openwrt/files/usr/share/daed/geoip.dat
@@ -73,3 +76,11 @@ printf "uci set network.wan.password='%s'\n" "$PPPOE_PASS" >> /builder/openwrt/f
 printf "uci commit network\nexit 0\n" >> /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
 
 chmod +x /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
+
+# ========== 新增：自动还原加密注入的 PassWall 配置文件 ==========
+if [ -n "$PASSWALL_CONF_B64" ]; then
+  mkdir -p /builder/openwrt/files/etc/config
+  echo "$PASSWALL_CONF_B64" | base64 -d > /builder/openwrt/files/etc/config/passwall
+  chmod 0600 /builder/openwrt/files/etc/config/passwall
+  echo "✅ PassWall 配置文件已成功打包进固件！"
+fi
