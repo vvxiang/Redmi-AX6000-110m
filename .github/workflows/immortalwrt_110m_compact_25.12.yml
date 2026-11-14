@@ -232,9 +232,28 @@ jobs:
         CONFIG_KERNEL_XDP_SOCKETS=y
         CONFIG_PACKAGE_kmod-xdp-sockets-diag=y
         EOF
-        
+
+        # ===== 关键修复：直接写入内核 6.12 底层配置模板，防止 make defconfig 自动抹除 BTF =====
+        for kconf in /builder/openwrt/target/linux/generic/config-6.12 /builder/openwrt/target/linux/mediatek/filogic/config-6.12; do
+          if [ -f "$kconf" ]; then
+            sed -i '/CONFIG_DEBUG_INFO/d' "$kconf"
+            cat << 'EOF' >> "$kconf"
+        CONFIG_DEBUG_INFO=y
+        CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT=y
+        CONFIG_DEBUG_INFO_BTF=y
+        CONFIG_DEBUG_INFO_BTF_MODULES=y
+        # CONFIG_DEBUG_INFO_REDUCED is not set
+        # CONFIG_DEBUG_INFO_NONE is not set
+        CONFIG_PAHOLE_HAS_SPLIT_BTF=y
+        CONFIG_PAHOLE_HAS_LANG_EXCLUDE=y
+        EOF
+          fi
+        done
         # 5. 刷新并自动补全 .config 依赖
         make defconfig
+        
+        # 6. 编译前强制校验：确认最终生成的 .config 中 BTF 已真正生效
+        grep -E "CONFIG_KERNEL_DEBUG_INFO_BTF=y" /builder/openwrt/.config || { echo "❌ BTF 配置未生效！"; exit 1; }
         
     - name: Download package
       working-directory: /builder/openwrt
