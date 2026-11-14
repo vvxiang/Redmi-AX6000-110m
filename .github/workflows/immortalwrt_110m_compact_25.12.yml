@@ -260,28 +260,25 @@ jobs:
       run: |
         df -h
         mkdir -p /builder/output
-        # 仅复制唯一的 sysupgrade.bin 固件到输出目录
-        cp -f /builder/openwrt/bin/targets/mediatek/filogic/*redmi-router-ax6000-110m-squashfs-sysupgrade.bin /builder/output/
+        
+        # 1. 生成北京时间时间戳（例如：20261114-1410）
+        BUILD_DATE=$(TZ=Asia/Shanghai date +%Y%m%d-%H%M)
+        echo "BUILD_DATE=${BUILD_DATE}" >> $GITHUB_ENV
+        
+        # 2. 复制固件到 /builder/output/ 并直接加上时间戳后缀
+        for file in /builder/openwrt/bin/targets/mediatek/filogic/*redmi-router-ax6000-110m-squashfs-sysupgrade.bin; do
+          if [ -f "$file" ]; then
+            filename=$(basename "$file")
+            cp -f "$file" "/builder/output/${filename%.bin}-${BUILD_DATE}.bin"
+          fi
+        done
+        
         ls -lh /builder/output/
         
     - name: Upload artifact
       uses: actions/upload-artifact@v7
       with:
-        name: ax6000_immortalwrt_110m_compact_25.12
-        # 仅上传这一个 sysupgrade.bin 文件
-        path: /builder/output/*redmi-router-ax6000-110m-squashfs-sysupgrade.bin
-        
-    - name: Generate build date tag
-      run: |
-        echo "BUILD_DATE=$(TZ=Asia/Shanghai date +%Y%m%d-%H%M%S)" >> $GITHUB_ENV
-        
-    - name: Create Release
-      if: success()
-      uses: softprops/action-gh-release@v3
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ env.BUILD_DATE }}
-        name: RedmiAX6000_110m_Compact_25.12_${{ env.BUILD_DATE }}
-        generate_release_notes: true
-        # 仅发布这一个 sysupgrade.bin 文件
+        # Artifact 压缩包名称也同步加上时间戳
+        name: ax6000_immortalwrt_110m_compact_25.12_${{ env.BUILD_DATE }}
+        # 匹配带时间戳的新文件名
+        path: /builder/output/*redmi-router-ax6000-110m-squashfs-sysupgrade-*.bin
