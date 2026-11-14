@@ -214,7 +214,10 @@ jobs:
           $GITHUB_WORKSPACE/customize.sh
         fi
 
-        # 4. 强制开启 ccache、禁用 Rust 编译（防 OOM），并关闭多余安装包制作以提速
+        # 4. 解除顶层 BTF 互斥与裁剪限制，追加开启内核 eBPF 与 BTF 支持
+        sed -i '/CONFIG_KERNEL_DEBUG_INFO/d' /builder/openwrt/.config
+        sed -i '/CONFIG_STRIP_KERNEL_EXPORTS/d' /builder/openwrt/.config
+        sed -i '/CONFIG_USE_MKLIBS/d' /builder/openwrt/.config
         cat << 'EOF' >> /builder/openwrt/.config
         CONFIG_CCACHE=y
         # CONFIG_RUST_HOST_BUILD is not set
@@ -226,12 +229,16 @@ jobs:
         # CONFIG_TARGET_ROOTFS_EXT4FS is not set
         # CONFIG_TARGET_ROOTFS_INITRAMFS is not set
         
-        # ===== 新增：daed 必需的内核 eBPF 与 BTF 支持 =====
+        # ===== 解锁并开启 daed 必需的顶层内核 eBPF 与 BTF 支持 =====
+        # CONFIG_STRIP_KERNEL_EXPORTS is not set
+        # CONFIG_USE_MKLIBS is not set
         CONFIG_KERNEL_BPF_EVENTS=y
         CONFIG_KERNEL_CGROUP_BPF=y
         CONFIG_KERNEL_DEBUG_INFO=y
+        CONFIG_KERNEL_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT=y
         CONFIG_KERNEL_DEBUG_INFO_BTF=y
-        #CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set
+        # CONFIG_KERNEL_DEBUG_INFO_NONE is not set
+        # CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set
         CONFIG_KERNEL_XDP_SOCKETS=y
         CONFIG_PACKAGE_kmod-xdp-sockets-diag=y
         EOF
@@ -264,8 +271,12 @@ jobs:
         make defconfig
         
         # 6. 编译前强制校验：确认最终生成的 .config 中 BTF 已真正生效
-        grep -E "CONFIG_KERNEL_DEBUG_INFO_BTF=y" /builder/openwrt/.config || { echo "❌ BTF 配置未生效！"; exit 1; }
-        
+        if ! grep -q "CONFIG_KERNEL_DEBUG_INFO_BTF=y" /builder/openwrt/.config; then
+          echo "⚠️ 顶层 .config 中未保留 BTF，正在打印相关调试信息选项排查："
+          grep "DEBUG_INFO" /builder/openwrt/.config || true
+          exit 1
+        fi
+
     - name: Download package
       working-directory: /builder/openwrt
       run: |
@@ -283,7 +294,7 @@ jobs:
         # 多线程静默编译；若失败则单线程编译并将完整日志存入 build.log，屏幕仅打印最后 150 行防止日志截断
         if ! make -j$(nproc); then
           echo "❌ 多线程编译失败，正在单线程定位具体报错..."
-          make -j1 V=s > build.log 2>&1 || {CONFIG_KERNEL_DEBUG_INFO_REDUCED 
+          make -j1 V=s > build.log 2>&1 || { 
             echo "================ 报错关键日志 ================"
             tail -n 150 build.log
             exit 1
