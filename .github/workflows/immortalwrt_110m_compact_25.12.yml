@@ -7,6 +7,8 @@
 #=================================================
 
 name: immortalwrt_110m_compact_25.12
+run-name: ax6000_immortalwrt_110m_compact_25.12_#${{ github.run_number }} (${{ github.run_started_at }})
+
 
 # Add a button to trigger the workflow
 on: 
