@@ -191,6 +191,7 @@ jobs:
         PPPOE_PASS: ${{ secrets.PPPOE_PASS }}
         ROOT_PASS: ${{ secrets.ROOT_PASS }}
         WIFI_PASS: ${{ secrets.WIFI_PASS }}
+        PASSWALL_CONF_B64: ${{ secrets.PASSWALL_CONF_B64 }}
         CONFIG_FILE: 'ax6000_immortalwrt_110m_compact.config'
       run: |
         # 1. 复制配置文件到 OpenWrt 编译目录
