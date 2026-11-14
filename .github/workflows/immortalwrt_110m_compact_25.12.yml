@@ -163,7 +163,7 @@ jobs:
     # ==================== 新增：双重极速编译缓存 ====================
     - name: Cache OpenWrt Toolchain
       id: cache-toolchain
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           /builder/openwrt/staging_dir/host
@@ -177,7 +177,7 @@ jobs:
           ${{ runner.os }}-toolchain-immortalwrt-25.12-
 
     - name: Cache ccache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: /builder/ccache
         key: ${{ runner.os }}-ccache-ax6000-${{ github.run_id }}
