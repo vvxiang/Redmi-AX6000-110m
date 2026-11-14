@@ -19,7 +19,7 @@ on:
     # UTC 时间对应北京时间（UTC+8=北京时间）：7月20日，早上5点10分 开始编译
     #- cron: '10 21 19 7 *'  
     # UTC 时间对应北京时间：每月2、9、16、23日，早上5点10分 开始编译    
-   - cron: '10 21 1,8,15,22 * *'
+    - cron: '10 21 1,8,15,22 * *'
 
 env:
   CCACHE_DIR: /builder/ccache
@@ -231,27 +231,35 @@ jobs:
         CONFIG_KERNEL_CGROUP_BPF=y
         CONFIG_KERNEL_DEBUG_INFO=y
         CONFIG_KERNEL_DEBUG_INFO_BTF=y
-        CONFIG_KERNEL_DEBUG_INFO_REDUCED=n
+        #CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set
         CONFIG_KERNEL_XDP_SOCKETS=y
         CONFIG_PACKAGE_kmod-xdp-sockets-diag=y
         EOF
 
-        # ===== 关键修复：直接写入内核 6.12 底层配置模板，防止 make defconfig 自动抹除 BTF =====
+        # ===== 关键修复：直接写入内核 6.12 底层配置模板（完整回答所有 Kconfig 单选项防卡死） =====
         for kconf in /builder/openwrt/target/linux/generic/config-6.12 /builder/openwrt/target/linux/mediatek/filogic/config-6.12; do
           if [ -f "$kconf" ]; then
             sed -i '/CONFIG_DEBUG_INFO/d' "$kconf"
+            sed -i '/CONFIG_PAHOLE_HAS/d' "$kconf"
             cat << 'EOF' >> "$kconf"
         CONFIG_DEBUG_INFO=y
+        # CONFIG_DEBUG_INFO_NONE is not set
         CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT=y
+        # CONFIG_DEBUG_INFO_DWARF4 is not set
+        # CONFIG_DEBUG_INFO_DWARF5 is not set
+        # CONFIG_DEBUG_INFO_REDUCED is not set
+        # CONFIG_DEBUG_INFO_COMPRESSED_NONE is not set
+        # CONFIG_DEBUG_INFO_COMPRESSED_ZLIB is not set
+        # CONFIG_DEBUG_INFO_SPLIT is not set
         CONFIG_DEBUG_INFO_BTF=y
         CONFIG_DEBUG_INFO_BTF_MODULES=y
-        # CONFIG_DEBUG_INFO_REDUCED is not set
-        # CONFIG_DEBUG_INFO_NONE is not set
         CONFIG_PAHOLE_HAS_SPLIT_BTF=y
         CONFIG_PAHOLE_HAS_LANG_EXCLUDE=y
+        # CONFIG_GDB_SCRIPTS is not set
         EOF
           fi
         done
+
         # 5. 刷新并自动补全 .config 依赖
         make defconfig
         
@@ -275,7 +283,7 @@ jobs:
         # 多线程静默编译；若失败则单线程编译并将完整日志存入 build.log，屏幕仅打印最后 150 行防止日志截断
         if ! make -j$(nproc); then
           echo "❌ 多线程编译失败，正在单线程定位具体报错..."
-          make -j1 V=s > build.log 2>&1 || {
+          make -j1 V=s > build.log 2>&1 || {CONFIG_KERNEL_DEBUG_INFO_REDUCED 
             echo "================ 报错关键日志 ================"
             tail -n 150 build.log
             exit 1
