@@ -242,7 +242,7 @@ jobs:
         CONFIG_KERNEL_XDP_SOCKETS=y
         CONFIG_PACKAGE_kmod-xdp-sockets-diag=y
         EOF
-
+        
         # ===== 关键修复：直接写入内核 6.12 底层配置模板（完整回答所有 Kconfig 单选项防卡死） =====
         for kconf in /builder/openwrt/target/linux/generic/config-6.12 /builder/openwrt/target/linux/mediatek/filogic/config-6.12; do
           if [ -f "$kconf" ]; then
@@ -255,8 +255,9 @@ jobs:
         # CONFIG_DEBUG_INFO_DWARF4 is not set
         # CONFIG_DEBUG_INFO_DWARF5 is not set
         # CONFIG_DEBUG_INFO_REDUCED is not set
-        # CONFIG_DEBUG_INFO_COMPRESSED_NONE is not set
+        CONFIG_DEBUG_INFO_COMPRESSED_NONE=y
         # CONFIG_DEBUG_INFO_COMPRESSED_ZLIB is not set
+        # CONFIG_DEBUG_INFO_COMPRESSED_ZSTD is not set
         # CONFIG_DEBUG_INFO_SPLIT is not set
         CONFIG_DEBUG_INFO_BTF=y
         CONFIG_DEBUG_INFO_BTF_MODULES=y
@@ -276,6 +277,8 @@ jobs:
           grep "DEBUG_INFO" /builder/openwrt/.config || true
           exit 1
         fi
+
+      
 
     - name: Download package
       working-directory: /builder/openwrt
