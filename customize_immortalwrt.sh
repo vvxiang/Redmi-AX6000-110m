@@ -21,8 +21,7 @@ sed -i 's/ImmortalWrt/ImmortalWrt/g' /builder/openwrt/package/base-files/files/b
 # ========== 新增：生成uci-defaults 首次开机自动配置 LAN IP + WiFi ==========
 # 源码内files目录，编译时打包进固件
 mkdir -p /builder/openwrt/files/etc/uci-defaults
-
-cat > /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip <<'EOF'
+cat > /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip <<EOF
 #!/bin/sh
 
 # 设置LAN IP
