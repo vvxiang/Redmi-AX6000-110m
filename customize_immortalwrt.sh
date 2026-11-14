@@ -23,7 +23,18 @@ curl -fsSL "${DAT_HOST}/${DAT_REPO}/geosite.dat" -o /builder/openwrt/files/usr/s
 ln -sf /usr/share/v2ray/geoip.dat /builder/openwrt/files/usr/share/daed/geoip.dat
 ln -sf /usr/share/v2ray/geosite.dat /builder/openwrt/files/usr/share/daed/geosite.dat
 
-# 2. 生成 uci-defaults 首次开机自动配置
+# 2. 预置 11 万条 anti-AD 去广告屏蔽列表及每周自动静默更新任务
+mkdir -p /builder/openwrt/files/usr/share/passwall/rules
+mkdir -p /builder/openwrt/files/etc/crontabs
+
+ANTIAD_HOST="https://anti-ad.net"
+curl -fsSL "${ANTIAD_HOST}/domains.txt" -o /builder/openwrt/files/usr/share/passwall/rules/block_host
+
+cat << 'CRON' >> /builder/openwrt/files/etc/crontabs/root
+30 4 * * 3,0 curl -fsSL "https://anti-ad.net" -o /tmp/block_host && [ -s /tmp/block_host ] && mv -f /tmp/block_host /usr/share/passwall/rules/block_host && /etc/init.d/passwall restart >/dev/null 2>&1
+CRON
+
+# 3. 生成 uci-defaults 首次开机自动配置
 mkdir -p /builder/openwrt/files/etc/uci-defaults
 
 cat > /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip <<'EOF'
@@ -77,7 +88,7 @@ printf "uci commit network\nexit 0\n" >> /builder/openwrt/files/etc/uci-defaults
 
 chmod +x /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
 
-# ========== 新增：自动还原加密注入的 PassWall 配置文件 ==========
+# 4. 自动还原加密注入的 PassWall 配置文件
 if [ -n "$PASSWALL_CONF_B64" ]; then
   mkdir -p /builder/openwrt/files/etc/config
   echo "$PASSWALL_CONF_B64" | base64 -d > /builder/openwrt/files/etc/config/passwall
