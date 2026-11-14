@@ -24,15 +24,15 @@ ln -sf /usr/share/v2ray/geoip.dat /builder/openwrt/files/usr/share/daed/geoip.da
 ln -sf /usr/share/v2ray/geosite.dat /builder/openwrt/files/usr/share/daed/geosite.dat
 
 # 2. 预置 11 万条 anti-AD 去广告屏蔽列表及每周自动静默更新任务
+# 2. 预置 11 万条 anti-AD 去广告屏蔽列表及每周自动静默更新任务
 mkdir -p /builder/openwrt/files/usr/share/passwall/rules
 mkdir -p /builder/openwrt/files/etc/crontabs
 
 ANTIAD_HOST="https://anti-ad.net"
 curl -fsSL "${ANTIAD_HOST}/domains.txt" -o /builder/openwrt/files/usr/share/passwall/rules/block_host
 
-cat << 'CRON' >> /builder/openwrt/files/etc/crontabs/root
-30 4 * * 3,0 curl -fsSL "https://anti-ad.net" -o /tmp/block_host && [ -s /tmp/block_host ] && mv -f /tmp/block_host /usr/share/passwall/rules/block_host && /etc/init.d/passwall restart >/dev/null 2>&1
-CRON
+printf "30 4 * * 3,0 curl -fsSL \"%s/domains.txt\" -o /tmp/block_host && [ -s /tmp/block_host ] && mv -f /tmp/block_host /usr/share/passwall/rules/block_host && /etc/init.d/passwall restart >/dev/null 2>&1\n" "$ANTIAD_HOST" >> /builder/openwrt/files/etc/crontabs/root
+
 
 # 3. 生成 uci-defaults 首次开机自动配置
 mkdir -p /builder/openwrt/files/etc/uci-defaults
