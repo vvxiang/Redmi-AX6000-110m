@@ -90,7 +90,15 @@ jobs:
         echo "src-git openclash https://github.com/vernesong/OpenClash.git;master" >> ./feeds.conf.default
         # 追加全新的一体化 daede 专属源
         echo "src-git daede https://github.com/kenzok8/openwrt-daede.git;main" >> ./feeds.conf.default
-        echo "✅ PassWall、OpenClash 与 daede 最新源追加成功！"
+                # 清理可能存在的旧版 luci-app-adguardhome 防止冲突
+        rm -rf package/feeds/luci/luci-app-adguardhome package/luci-app-adguardhome*
+        
+        # 2026-11-16-18 新增拉取最新版 luci-app-adguardhome-lite 并复制源码包到 package 目录
+        git clone --depth=1 https://github.com/Ozero-top/luci-app-adguardhome-lite /tmp/agh-lite
+        cp -rf /tmp/agh-lite/src/luci-app-adguardhome-lite package/luci-app-adguardhome-lite
+        rm -rf /tmp/agh-lite
+        # echo "✅ luci-app-adguardhome-lite 最新源码包已就绪！"
+        echo "✅ PassWall、OpenClash、luci-app-adguardhome-lite 与 daede 最新源追加成功！"
  
     - name: Apply AX6000 110M Layout Modifications
       working-directory: /builder/openwrt
