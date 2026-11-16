@@ -161,6 +161,7 @@ jobs:
         echo "✅ Feeds 更新与安装完成！"
 
     # ==================== 新增：双重极速编译缓存 ====================
+   
     - name: Cache OpenWrt Toolchain
       id: cache-toolchain
       uses: actions/cache@v5
@@ -169,12 +170,10 @@ jobs:
           /builder/openwrt/staging_dir/host
           /builder/openwrt/staging_dir/hostpkg
           /builder/openwrt/staging_dir/toolchain-*
-          /builder/openwrt/build_dir/host
-          /builder/openwrt/build_dir/hostpkg
-          /builder/openwrt/build_dir/toolchain-*
         key: ${{ runner.os }}-toolchain-immortalwrt-25.12-${{ hashFiles('**/ax6000_immortalwrt_110m_compact.config') }}
         restore-keys: |
           ${{ runner.os }}-toolchain-immortalwrt-25.12-
+
 
     - name: Cache ccache
       uses: actions/cache@v5
@@ -296,8 +295,8 @@ jobs:
       working-directory: /builder/openwrt
       run: |
         echo -e "$(nproc) thread build."
-        # 刷新恢复缓存后的文件时间戳，确保 100% 命中缓存不重编工具链
-        find /builder/openwrt/staging_dir /builder/openwrt/build_dir -exec touch -c {} + 2>/dev/null || true
+        # 强力刷新所有已缓存工具链（含隐藏标记文件）的时间戳，防止重编 llvm-bpf
+        find /builder/openwrt/staging_dir -exec touch -ch {} + 2>/dev/null || true
 
         # 多线程静默编译；若失败则单线程编译并将完整日志存入 build.log，屏幕仅打印最后 150 行防止日志截断
         if ! make -j$(nproc); then
