@@ -97,8 +97,15 @@ jobs:
         git clone --depth=1 https://github.com/Ozero-top/luci-app-adguardhome-lite /tmp/agh-lite
         cp -rf /tmp/agh-lite/src/luci-app-adguardhome-lite package/luci-app-adguardhome-lite
         rm -rf /tmp/agh-lite
+        # 修复 OpenWrt 25.12 apk 打包器不接受 PKG_RELEASE 包含字母（如 B3）的报错，强制转为纯数字
+        sed -i 's/PKG_RELEASE:=.*/PKG_RELEASE:=3/' package/luci-app-adguardhome-lite/Makefile
         # echo "✅ luci-app-adguardhome-lite 最新源码包已就绪！"
         echo "✅ PassWall、OpenClash、luci-app-adguardhome-lite 与 daede 最新源追加成功！"
+
+
+        # 拉取带完整中文网页界面的 luci-app-tailscale
+        git clone --depth=1 https://github.com package/luci-app-tailscale
+
  
     - name: Apply AX6000 110M Layout Modifications
       working-directory: /builder/openwrt
@@ -166,6 +173,13 @@ jobs:
         # 静默更新与安装，避免控制台被大量无关信息刷屏
         ./scripts/feeds update -a > /dev/null
         ./scripts/feeds install -a > /dev/null
+        # 1. 移除官方 tailscale 核心包自带的默认启动脚本与配置，避免与 luci-app-tailscale 打包冲突
+        sed -i '/\/etc\/init\.d\/tailscale/d;/\/etc\/config\/tailscale/d;' feeds/packages/net/tailscale/Makefile
+        
+        # 2. 拉取带完整中文网页界面的 luci-app-tailscale 并规范化版本号
+        rm -rf package/luci-app-tailscale
+        git clone --depth=1 https://github.com/asvow/luci-app-tailscale package/luci-app-tailscale
+        sed -i 's/PKG_RELEASE:=.*/PKG_RELEASE:=1/' package/luci-app-tailscale/Makefile
         echo "✅ Feeds 更新与安装完成！"
 
     # ==================== 新增：双重极速编译缓存 ====================
