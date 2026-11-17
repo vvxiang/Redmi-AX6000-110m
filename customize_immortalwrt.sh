@@ -70,6 +70,11 @@ net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
 SYSCTL
 sysctl -p >/dev/null 2>&1
+
+# ===== 启用 Tailscale 核心 + 中文网页管理界面 =====
+CONFIG_PACKAGE_tailscale=y
+CONFIG_PACKAGE_luci-app-tailscale=y
+CONFIG_PACKAGE_luci-i18n-tailscale-zh-cn=y
 EOF
 
 # 安全注入 2.4G & 5G WiFi 密码
