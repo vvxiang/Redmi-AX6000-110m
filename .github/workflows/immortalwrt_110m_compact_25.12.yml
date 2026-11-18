@@ -104,7 +104,7 @@ jobs:
         rm -rf package/feeds/luci/luci-app-tailscale package/luci-app-tailscale*
         
         # 提前拉取带完整中文网页界面的 luci-app-tailscale 并规范化版本号
-        git clone --depth=1 https://github.com package/luci-app-tailscale
+        git clone https://github.com/asvow/luci-app-tailscale package/luci-app-tailscale
         sed -i 's/PKG_RELEASE:=.*/PKG_RELEASE:=1/' package/luci-app-tailscale/Makefile
         echo "✅ PassWall、OpenClash、luci-app-adguardhome-lite 与 daede 最新源追加成功！"
 
