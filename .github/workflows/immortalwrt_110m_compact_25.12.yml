@@ -100,6 +100,12 @@ jobs:
         # 修复 OpenWrt 25.12 apk 打包器不接受 PKG_RELEASE 包含字母（如 B3）的报错，强制转为纯数字
         sed -i 's/PKG_RELEASE:=.*/PKG_RELEASE:=3/' package/luci-app-adguardhome-lite/Makefile
 
+        # 清理可能存在的旧版 tailscale 界面防止冲突
+        rm -rf package/feeds/luci/luci-app-tailscale package/luci-app-tailscale*
+        
+        # 提前拉取带完整中文网页界面的 luci-app-tailscale 并规范化版本号
+        git clone --depth=1 https://github.com package/luci-app-tailscale
+        sed -i 's/PKG_RELEASE:=.*/PKG_RELEASE:=1/' package/luci-app-tailscale/Makefile
         echo "✅ PassWall、OpenClash、luci-app-adguardhome-lite 与 daede 最新源追加成功！"
 
 
@@ -173,13 +179,8 @@ jobs:
         # 静默更新与安装，避免控制台被大量无关信息刷屏
         ./scripts/feeds update -a > /dev/null
         ./scripts/feeds install -a > /dev/null
-        # 1. 移除官方 tailscale 核心包自带的默认启动脚本与配置，避免与 luci-app-tailscale 打包冲突
+        # 移除官方 tailscale 核心包自带的默认启动脚本与配置，避免与 luci-app-tailscale 打包冲突
         sed -i '/\/etc\/init\.d\/tailscale/d;/\/etc\/config\/tailscale/d;' feeds/packages/net/tailscale/Makefile
-        
-        # 2. 拉取带完整中文网页界面的 luci-app-tailscale 并规范化版本号
-        rm -rf package/luci-app-tailscale
-        git clone --depth=1 https://github.com/asvow/luci-app-tailscale package/luci-app-tailscale
-        sed -i 's/PKG_RELEASE:=.*/PKG_RELEASE:=1/' package/luci-app-tailscale/Makefile
         echo "✅ Feeds 更新与安装完成！"
 
     # ==================== 新增：双重极速编译缓存 ====================
@@ -294,14 +295,24 @@ jobs:
           fi
         done
 
+        # 确保 Tailscale 必需的 TUN 虚拟网卡内核模块与插件已开启
+        echo "CONFIG_PACKAGE_kmod-tun=y" >> /builder/openwrt/.config
+        echo "CONFIG_PACKAGE_tailscale=y" >> /builder/openwrt/.config
+        echo "CONFIG_PACKAGE_luci-app-tailscale=y" >> /builder/openwrt/.config
+        echo "CONFIG_PACKAGE_luci-i18n-tailscale-zh-cn=y" >> /builder/openwrt/.config
+
+        # 5. 清除旧包索引缓存并刷新依赖（确保新拉取的 luci-app-tailscale 100% 被识别）
+        rm -rf /builder/openwrt/tmp
+        make defconfig
         # 5. 刷新并自动补全 .config 依赖
         make defconfig
         
         # 6. 编译前强制校验：确认最终生成的 .config 中 BTF 已真正生效
         # 6. 编译前强制校验：确认 BTF 与 Tailscale 均已真正生效
+
         grep -q "CONFIG_KERNEL_DEBUG_INFO_BTF=y" /builder/openwrt/.config || { echo "❌ BTF 配置未生效！"; exit 1; }
         grep -q "CONFIG_PACKAGE_luci-app-tailscale=y" /builder/openwrt/.config || { echo "❌ Tailscale 配置未生效！"; exit 1; }
-
+        echo "✅ 所有核心配置校验全部通过！"
         if ! grep -q "CONFIG_KERNEL_DEBUG_INFO_BTF=y" /builder/openwrt/.config; then
           echo "⚠️ 顶层 .config 中未保留 BTF，正在打印相关调试信息选项排查："
           grep "DEBUG_INFO" /builder/openwrt/.config || true
