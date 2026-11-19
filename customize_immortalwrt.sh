@@ -48,45 +48,31 @@ uci delete firewall.@defaults.flow_offloading_hw 2>/dev/null
 uci set firewall.@defaults.fullcone='1'
 uci commit firewall
 
-# 2.4 调大系统最大连接数并开启 BBR 拥塞控制 + FQ 队列
+# 2.4 调大系统最大连接数、开启 BBR 拥塞控制，并开启 IPv4/IPv6 子网路由转发（Tailscale 访问内网必备）
 cat << 'SYSCTL' >> /etc/sysctl.conf
 net.netfilter.nf_conntrack_max=65536
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
+net.ipv4.ip_forward=1
+net.ipv6.conf.all.forwarding=1
 SYSCTL
 sysctl -p >/dev/null 2>&1
 
-# 2.5 首次开机联网后，后台全自动下载并安装最新版 AdGuard Home 官方内核进闪存（零手动干预）
-cat << 'AGH_AUTO' > /etc/adguardhome_auto_install.sh
+# 2.5 自动启用纯官方 Tailscale 后台服务与子网路由宣告
+cat << 'TS_AUTO' > /etc/tailscale_auto_up.sh
 #!/bin/sh
-# 等待 45 秒确保宽带 PPPoE 拨号及 PassWall 代理均已顺利连通
-sleep 45
-
-# 读取助手配置的内核存放路径（默认位于闪存 /usr/bin/AdGuardHome）
-CORE_PATH=$(uci -q get adguardhome_lite.config.core_path || echo "/usr/bin/AdGuardHome")
-mkdir -p "$(dirname "$CORE_PATH")"
-
-# 若内核尚未安装，则通过国内高速镜像下载最新 arm64 官方正式版核心并解压安装
-if [ ! -x "$CORE_PATH" ]; then
-    DL_URL="https://gh-proxy.org"
-    if curl -fsSL --connect-timeout 15 --max-time 120 "$DL_URL" -o /tmp/agh_latest.tar.gz; then
-        tar -xzf /tmp/agh_latest.tar.gz -C /tmp/
-        if [ -f /tmp/AdGuardHome/AdGuardHome ]; then
-            mv -f /tmp/AdGuardHome/AdGuardHome "$CORE_PATH"
-            chmod +x "$CORE_PATH"
-            rm -rf /tmp/AdGuardHome /tmp/agh_latest.tar.gz
-            # 内核安装完成后，自动重启 AdGuard Home 助手服务使其立即上线工作
-            /etc/init.d/adguardhome_lite restart >/dev/null 2>&1 || true
-        fi
-    fi
+sleep 35
+if [ -x /etc/init.d/tailscale ]; then
+    /etc/init.d/tailscale enable
+    /etc/init.d/tailscale start
+    sleep 5
+    tailscale up --advertise-routes=192.168.100.0/24 --accept-routes --accept-dns=false >/dev/null 2>&1 &
 fi
-# 执行完毕后自动删除自身临时脚本，保持系统纯净
-rm -f /etc/adguardhome_auto_install.sh
-AGH_AUTO
+rm -f /etc/tailscale_auto_up.sh
+TS_AUTO
 
-chmod +x /etc/adguardhome_auto_install.sh
-# 放入后台异步执行，完全不阻塞正常开机流程
-/etc/adguardhome_auto_install.sh >/dev/null 2>&1 &
+chmod +x /etc/tailscale_auto_up.sh
+/etc/tailscale_auto_up.sh >/dev/null 2>&1 &
 EOF
 
 # 3. 安全注入 2.4G & 5G WiFi 密码（从 GitHub Secrets 读取）
