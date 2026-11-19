@@ -6,31 +6,33 @@
 # Description: Build OpenWrt using GitHub Actions
 #=================================================
 
+# 工作流名称（显示在 GitHub Actions 左侧列表）
 name: immortalwrt_110m_compact_25.12
+# 每次运行记录的动态标题：显示编译编号与触发方式（手动或定时）
 run-name: ax6000_immortalwrt_110m_compact_25.12_#${{ github.run_number }} [${{ github.event_name }}]
 
-
-# Add a button to trigger the workflow
+# 工作流触发条件设置
 on: 
-  repository_dispatch:
-  workflow_dispatch:
+  repository_dispatch: # 允许外部 API 事件触发
+  workflow_dispatch:   # 允许在 GitHub 网页端手动点击按钮触发编译
 
   schedule:
-    # UTC 时间对应北京时间（UTC+8=北京时间）：7月20日，早上5点10分 开始编译
-    #- cron: '10 21 19 7 *'  
-    # UTC 时间对应北京时间：每月2、9、16、23日，早上5点10分 开始编译    
+    # 定时自动编译（采用 UTC 世界协调时，北京时间 = UTC + 8 小时）
+    # UTC 21:10 对应北京时间次日凌晨 05:10，每月 2、9、16、23 日自动拉取最新源码编译并刷新云端缓存
     - cron: '10 21 1,8,15,22 * *'
 
+# 全局环境变量：配置 ccache 编译器缓存目录与最大 2GB 容量限制
 env:
   CCACHE_DIR: /builder/ccache
   CCACHE_MAXSIZE: 2G
     
 jobs:
   build:
-    # 建议 immortalwrt 使用低版本，更容易编译成功
+    # 指定使用 Ubuntu 22.04 虚拟机环境进行编译（对 ImmortalWrt 工具链兼容性最佳）
     runs-on: ubuntu-22.04
 
     steps:
+    # 第 1 步：清理虚拟机预装的无用大型软件（Android/Dotnet/Haskell等），释放最大磁盘空间并挂载到 /builder
     - name: Maximize build space
       uses: easimon/maximize-build-space@master
       with:
@@ -44,75 +46,71 @@ jobs:
         overprovision-lvm: 'true'
         build-mount-path: '/builder'        
 
+    # 第 2 步：创建编译工作目录与 ccache 缓存目录，赋予当前运行用户完整读写权限
     - name: Prepare Builder Directory
       run: |
         sudo mkdir -p /builder /builder/ccache
         sudo chown -R runner:runner /builder
         df -hT
 
+    # 第 3 步：检出当前 GitHub 仓库中的配置文件（.config）与自定义初始化脚本（customize.sh）
     - name: Checkout repository
       uses: actions/checkout@v7        
 
+    # 第 4 步：安装 ImmortalWrt 官方编译依赖工具链，清理残留缓存，并将系统时区设为北京时间
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo -E apt-get -qq update
-        sudo -E apt-get -qq install -y dwarves
+        # 已关闭 BTF，无需安装 dwarves 调试工具
+        # sudo -E apt-get -qq install -y dwarves
+        # 调用 ImmortalWrt 官方环境初始化脚本一键安装编译依赖
         sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)' > /dev/null
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
+        # 彻底清除系统多余目录腾出空间
         sudo rm -rf /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc /usr/share/dotnet /usr/local/graalvm /usr/local/.ghcup \
         /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules
+        # 设置系统时区为上海/北京时间（确保后续日志与固件文件名时间戳准确）
         sudo timedatectl set-timezone "Asia/Shanghai"
         sudo chown $USER:$GROUPS $GITHUB_WORKSPACE
         
+    # 第 5 步：打印当前磁盘剩余可用空间状态，确认空间充足
     - name: Check Space
       run: |
         df -h
 
+    # 第 6 步：克隆 ImmortalWrt 25.12 源码，清理旧插件冲突并拉取最新 PassWall 与 AdGuard Home 助手
     - name: Clone source code & Configure Feeds
       env:
         REPO_URL: https://github.com/immortalwrt/immortalwrt
       run: |
-        # 拉取源码并切换至正确目录
+        # 浅克隆 openwrt-25.12 分支源码以加快下载速度
         git clone -b openwrt-25.12 --single-branch --filter=blob:none $REPO_URL /builder/openwrt || { echo 'Git clone failed!'; exit 1; }
         cd /builder/openwrt   
         
-        # 清理潜在的内置冲突
+        # 清理官方源中可能自带的旧版 PassWall 与 OpenClash，防止版本冲突
         rm -rf package/feeds/luci/luci-app-passwall package/feeds/packages/passwall package/feeds/luci/luci-app-openclash
-        # 强力抹除可能存在冲突的旧版、内置的 dae/daed 源码
-        rm -rf package/feeds/luci/luci-app-daed package/feeds/packages/daed package/feeds/packages/dae
         
-        # 追加 PassWall 与 OpenClash 官方最新源
+        # 追加 PassWall 依赖包、PassWall 主界面及 OpenClash 官方最新源
         echo "src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main" >> ./feeds.conf.default
         echo "src-git passwall_luci https://github.com/Openwrt-Passwall/openwrt-passwall.git;main" >> ./feeds.conf.default
         echo "src-git openclash https://github.com/vernesong/OpenClash.git;master" >> ./feeds.conf.default
-        # 追加全新的一体化 daede 专属源
-        echo "src-git daede https://github.com/kenzok8/openwrt-daede.git;main" >> ./feeds.conf.default
-                # 清理可能存在的旧版 luci-app-adguardhome 防止冲突
-        rm -rf package/feeds/luci/luci-app-adguardhome package/luci-app-adguardhome*
-        
-        # 2026-11-16-18 新增拉取最新版 luci-app-adguardhome-lite 并复制源码包到 package 目录
+    
+        # 拉取适配 25.12 apk 系统的最新版 AdGuard Home 助手（luci-app-adguardhome-lite）源码
         git clone --depth=1 https://github.com/Ozero-top/luci-app-adguardhome-lite /tmp/agh-lite
         cp -rf /tmp/agh-lite/src/luci-app-adguardhome-lite package/luci-app-adguardhome-lite
         rm -rf /tmp/agh-lite
-        # 修复 OpenWrt 25.12 apk 打包器不接受 PKG_RELEASE 包含字母（如 B3）的报错，强制转为纯数字
+        # 修复 OpenWrt 25.12 apk 打包器不接受 PKG_RELEASE 包含字母（如 B3）的校验报错，强制转为纯数字
         sed -i 's/PKG_RELEASE:=.*/PKG_RELEASE:=3/' package/luci-app-adguardhome-lite/Makefile
+        echo "✅ PassWall、OpenClash 与 luci-app-adguardhome-lite 最新源追加成功！"
 
-        # 清理可能存在的旧版 tailscale 界面防止冲突
-        rm -rf package/feeds/luci/luci-app-tailscale package/luci-app-tailscale*
-        
-        # 提前拉取带完整中文网页界面的 luci-app-tailscale 并规范化版本号
-        git clone https://github.com/asvow/luci-app-tailscale package/luci-app-tailscale
-        sed -i 's/PKG_RELEASE:=.*/PKG_RELEASE:=1/' package/luci-app-tailscale/Makefile
-        echo "✅ PassWall、OpenClash、luci-app-adguardhome-lite 与 daede 最新源追加成功！"
-
- 
+    # 第 7 步：为小米 Redmi AX6000 注入 hanwckf 110M 大分区补丁与专属 DTS 设备树
     - name: Apply AX6000 110M Layout Modifications
       working-directory: /builder/openwrt
       run: |
-        # 1. 在 filogic.mk 末尾追加 Device（仅保留 sysupgrade.bin，不生成 factory.bin）
+        # 1. 在联发科 filogic 镜像配置文件末尾注册 110M 大分区机型（仅生成 sysupgrade.bin 升级包）
         cat << 'EOF' >> target/linux/mediatek/image/filogic.mk
 
         define Device/xiaomi_redmi-router-ax6000-110m
@@ -129,7 +127,7 @@ jobs:
         TARGET_DEVICES += xiaomi_redmi-router-ax6000-110m
         EOF
 
-        # 2. 创建全新的 immortalwrt 110m大分区 DTS 设备树文件
+        # 2. 创建 110M 大分区 DTS 设备树文件（将 ubi 可用分区扩容至 110MB）
         cat << 'EOF' > target/linux/mediatek/dts/mt7986a-xiaomi-redmi-router-ax6000-110m.dts
         // SPDX-License-Identifier: (GPL-2.0 OR MIT)
 
@@ -169,18 +167,17 @@ jobs:
 
         echo "✅ AX6000 110M 大分区适配代码补丁应用成功！"
 
+    # 第 8 步：静默更新并安装所有 Feeds 软件源索引
     - name: Update & Install feeds
       working-directory: /builder/openwrt
       run: |
-        # 静默更新与安装，避免控制台被大量无关信息刷屏
         ./scripts/feeds update -a > /dev/null
         ./scripts/feeds install -a > /dev/null
-        # 移除官方 tailscale 核心包自带的默认启动脚本与配置，避免与 luci-app-tailscale 打包冲突
-        sed -i '/\/etc\/init\.d\/tailscale/d;/\/etc\/config\/tailscale/d;' feeds/packages/net/tailscale/Makefile
+
         echo "✅ Feeds 更新与安装完成！"
 
-    # ==================== 新增：双重极速编译缓存 ====================
-   
+    # ==================== 第 9 步：双重极速编译缓存 ====================
+    # 9.1 缓存已编译好的交叉编译工具链（staging_dir），命中缓存可跳过漫长的工具链编译
     - name: Cache OpenWrt Toolchain
       id: cache-toolchain
       uses: actions/cache@v5
@@ -193,7 +190,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-toolchain-immortalwrt-25.12-
 
-
+    # 9.2 缓存 C/C++ 目标文件编译缓存（ccache），进一步缩短增量编译时间
     - name: Cache ccache
       uses: actions/cache@v5
       with:
@@ -203,8 +200,10 @@ jobs:
           ${{ runner.os }}-ccache-ax6000-
     # ================================================================
     
+    # 第 10 步：加载预设 .config 配置文件，通过 Secrets 注入敏感账号密码，并刷新软件包依赖
     - name: Configuration Customization - Build_ax6000_immortalwrt_110m_compact_25.12
       env:
+        # 从仓库 Secrets 安全读取敏感配置（编译日志中自动打码隐藏，零明文泄露）
         PPPOE_USER: ${{ secrets.PPPOE_USER }}
         PPPOE_PASS: ${{ secrets.PPPOE_PASS }}
         ROOT_PASS: ${{ secrets.ROOT_PASS }}
@@ -212,14 +211,14 @@ jobs:
         PASSWALL_CONF_B64: ${{ secrets.PASSWALL_CONF_B64 }}
         CONFIG_FILE: 'ax6000_immortalwrt_110m_compact.config'
       run: |
-        # 1. 复制配置文件到 OpenWrt 编译目录
+        # 1. 复制自定义配置文件到 OpenWrt 编译目录
         [ -e "$CONFIG_FILE" ] && cp "$CONFIG_FILE" /builder/openwrt/.config
         
-        # 2. 给根目录下的两个自定义脚本赋予执行权限
+        # 2. 赋予仓库根目录下的自定义脚本可执行权限
         [ -e "./customize_immortalwrt.sh" ] && chmod +x ./customize_immortalwrt.sh
         [ -e "./customize.sh" ] && chmod +x ./customize.sh
         
-        # 3. 切入到 openwrt 源码目录执行外部脚本
+        # 3. 切入源码目录执行自定义脚本（预置规则库、首次开机网络/WiFi/PPPoE/BBR 配置及 PassWall 还原）
         cd /builder/openwrt
         
         if [ -e "$GITHUB_WORKSPACE/customize_immortalwrt.sh" ]; then
@@ -232,116 +231,45 @@ jobs:
           $GITHUB_WORKSPACE/customize.sh
         fi
 
-        # 4. 解除顶层 BTF 互斥与裁剪限制，追加开启内核 eBPF 与 BTF 支持
-        sed -i '/CONFIG_KERNEL_DEBUG_INFO/d' /builder/openwrt/.config
-        sed -i '/CONFIG_STRIP_KERNEL_EXPORTS/d' /builder/openwrt/.config
-        sed -i '/CONFIG_USE_MKLIBS/d' /builder/openwrt/.config
-        cat << 'EOF' >> /builder/openwrt/.config
-        CONFIG_CCACHE=y
-        # CONFIG_RUST_HOST_BUILD is not set
-        # CONFIG_PACKAGE_rust is not set
-        # CONFIG_ALL is not set
-        # CONFIG_ALL_KMODS is not set
-        # CONFIG_ALL_NONSHARED is not set
-        # CONFIG_TARGET_ROOTFS_TARGZ is not set
-        # CONFIG_TARGET_ROOTFS_EXT4FS is not set
-        # CONFIG_TARGET_ROOTFS_INITRAMFS is not set
-        
-        # ===== 解锁并开启 daed 必需的顶层内核 eBPF 与 BTF 支持 =====
-        # CONFIG_STRIP_KERNEL_EXPORTS is not set
-        # CONFIG_USE_MKLIBS is not set
-        CONFIG_KERNEL_BPF_EVENTS=y
-        CONFIG_KERNEL_CGROUP_BPF=y
-        CONFIG_KERNEL_DEBUG_INFO=y
-        CONFIG_KERNEL_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT=y
-        CONFIG_KERNEL_DEBUG_INFO_BTF=y
-        # CONFIG_KERNEL_DEBUG_INFO_NONE is not set
-        # CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set
-        CONFIG_KERNEL_XDP_SOCKETS=y
-        CONFIG_PACKAGE_kmod-xdp-sockets-diag=y
-
-        # ===== 新增：启用 Tailscale 远程异地组网管理 =====
-        CONFIG_PACKAGE_tailscale=y
-        CONFIG_PACKAGE_luci-app-tailscale=y
-        
-        EOF
-        
-        # ===== 关键修复：直接写入内核 6.12 底层配置模板（完整回答所有 Kconfig 单选项防卡死） =====
-        for kconf in /builder/openwrt/target/linux/generic/config-6.12 /builder/openwrt/target/linux/mediatek/filogic/config-6.12; do
-          if [ -f "$kconf" ]; then
-            sed -i '/CONFIG_DEBUG_INFO/d' "$kconf"
-            sed -i '/CONFIG_PAHOLE_HAS/d' "$kconf"
-            cat << 'EOF' >> "$kconf"
-        CONFIG_DEBUG_INFO=y
-        # CONFIG_DEBUG_INFO_NONE is not set
-        CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT=y
-        # CONFIG_DEBUG_INFO_DWARF4 is not set
-        # CONFIG_DEBUG_INFO_DWARF5 is not set
-        # CONFIG_DEBUG_INFO_REDUCED is not set
-        CONFIG_DEBUG_INFO_COMPRESSED_NONE=y
-        # CONFIG_DEBUG_INFO_COMPRESSED_ZLIB is not set
-        # CONFIG_DEBUG_INFO_COMPRESSED_ZSTD is not set
-        # CONFIG_DEBUG_INFO_SPLIT is not set
-        CONFIG_DEBUG_INFO_BTF=y
-        CONFIG_DEBUG_INFO_BTF_MODULES=y
-        CONFIG_PAHOLE_HAS_SPLIT_BTF=y
-        CONFIG_PAHOLE_HAS_LANG_EXCLUDE=y
-        # CONFIG_GDB_SCRIPTS is not set
-        EOF
-          fi
-        done
-
-        # 确保 Tailscale 必需的 TUN 虚拟网卡内核模块与插件已开启
-        echo "CONFIG_PACKAGE_kmod-tun=y" >> /builder/openwrt/.config
-        echo "CONFIG_PACKAGE_tailscale=y" >> /builder/openwrt/.config
-        echo "CONFIG_PACKAGE_luci-app-tailscale=y" >> /builder/openwrt/.config
-        echo "CONFIG_PACKAGE_luci-i18n-tailscale-zh-cn=y" >> /builder/openwrt/.config
-
-        # 5. 清除旧包索引缓存并刷新依赖（确保新拉取的 luci-app-tailscale 100% 被识别）
+        # 4. 开启 ccache 缓存加速，清理旧索引缓存后运行 make defconfig 自动补全所有软件依赖
+        echo "CONFIG_CCACHE=y" >> /builder/openwrt/.config
         rm -rf /builder/openwrt/tmp
         make defconfig
-        # 5. 刷新并自动补全 .config 依赖
-        make defconfig
-        
-        # 6. 编译前强制校验：确认最终生成的 .config 中 BTF 已真正生效
-        # 6. 编译前强制校验：确认 BTF 与 Tailscale 均已真正生效
+        echo "✅ 纯净版配置与依赖刷新完成！"
 
-        grep -q "CONFIG_KERNEL_DEBUG_INFO_BTF=y" /builder/openwrt/.config || { echo "❌ BTF 配置未生效！"; exit 1; }
-        grep -q "CONFIG_PACKAGE_luci-app-tailscale=y" /builder/openwrt/.config || { echo "❌ Tailscale 配置未生效！"; exit 1; }
-        echo "✅ 所有核心配置校验全部通过！"
-        if ! grep -q "CONFIG_KERNEL_DEBUG_INFO_BTF=y" /builder/openwrt/.config; then
-          echo "⚠️ 顶层 .config 中未保留 BTF，正在打印相关调试信息选项排查："
-          grep "DEBUG_INFO" /builder/openwrt/.config || true
-          exit 1
-        fi
-
-      
-
+    # 第 11 步：多线程预下载所有软件包源码，并自动清理下载不完整（小于 1KB）的损坏文件
     - name: Download package
       working-directory: /builder/openwrt
       run: |
+        # 调用全部 CPU 核心并发下载所有需要的软件包源码至 dl 目录
         make download -j$(nproc)
+        # 列出并删除小于 1024 字节的残缺或下载失败的空文件，防止后续编译校验报错
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
+    # 第 12 步：正式多线程编译固件（内置失败自动切换单线程抓取详细报错日志机制）
     - name: Build firmware
       working-directory: /builder/openwrt
       run: |
+        # 打印当前虚拟机分配到的并发线程数
         echo -e "$(nproc) thread build."
-        # 强力刷新所有已缓存工具链（含隐藏标记文件）的时间戳，防止重编 llvm-bpf
+        # 强力刷新所有已缓存工具链（含隐藏标记文件）的时间戳，防止源码时间较新触发工具链重编
         find /builder/openwrt/staging_dir -exec touch -ch {} + 2>/dev/null || true
 
-        # 多线程静默编译；若失败则单线程编译并将完整日志存入 build.log，屏幕仅打印最后 150 行防止日志截断
+        # 优先使用全核心多线程静默极速编译；若失败则自动降级为单线程详细输出模式（V=s）定位具体报错
         if ! make -j$(nproc); then
           echo "❌ 多线程编译失败，正在单线程定位具体报错..."
           make -j1 V=s > build.log 2>&1 || { 
             echo "================ 报错关键日志 ================"
+            # 仅在控制台输出最后 150 行最关键的报错信息，避免刷屏截断
             tail -n 150 build.log
             exit 1
           }
         fi
+        # 编译完成后输出 ccache 编译器缓存的命中率统计信息
         ccache -s || true
 
+    # 第 13 步：异常排障保障——仅当上一步编译失败时，自动将完整的 build.log 上传供下载分析
     - name: Upload build log on failure
       if: failure()
       uses: actions/upload-artifact@v7
@@ -349,16 +277,19 @@ jobs:
         name: build-error-log
         path: /builder/openwrt/build.log
 
+    # 第 14 步：检查编译后剩余磁盘空间，提取生成的 110M 专属固件并重命名加上北京时间时间戳
     - name: Check Space & Extract Target Firmware
       run: |
+        # 打印编译结束后的磁盘占用情况
         df -h
+        # 创建独立的固件输出提取目录
         mkdir -p /builder/output
         
-        # 1. 生成北京时间时间戳（例如：20261114-1410）
+        # 1. 生成北京时间时间戳（格式：YYYYMMDD-HHMM，例如 20261119-1519）并写入全局环境变量
         BUILD_DATE=$(TZ=Asia/Shanghai date +%Y%m%d-%H%M)
         echo "BUILD_DATE=${BUILD_DATE}" >> $GITHUB_ENV
         
-        # 2. 复制固件到 /builder/output/ 并直接加上时间戳后缀
+        # 2. 遍历提取生成的 Redmi AX6000 110M 布局 sysupgrade 升级固件，并在文件名末尾追加时间戳后缀
         for file in /builder/openwrt/bin/targets/mediatek/filogic/*redmi-router-ax6000-110m-squashfs-sysupgrade.bin; do
           if [ -f "$file" ]; then
             filename=$(basename "$file")
@@ -366,12 +297,18 @@ jobs:
           fi
         done
         
+        # 列出最终提取出来的成品固件及其文件大小
         ls -lh /builder/output/
         
+    # 第 15 步：将提取并重命名好的最终固件包上传至 GitHub Actions 的 Artifacts 产物区（云端保留 90 天）
     - name: Upload artifact
       uses: actions/upload-artifact@v7
       with:
-        # Artifact 压缩包名称也同步加上时间戳
+        # Artifact 压缩包名称同步附带北京时间时间戳，方便在网页端一眼区分版本
         name: ax6000_immortalwrt_110m_compact_25.12_${{ env.BUILD_DATE }}
-        # 匹配带时间戳的新文件名
+        # 精确匹配带时间戳的新固件文件进行上传
         path: /builder/output/*redmi-router-ax6000-110m-squashfs-sysupgrade-*.bin
+
+
+
+
