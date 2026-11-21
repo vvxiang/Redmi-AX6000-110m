@@ -236,6 +236,9 @@ jobs:
         rm -rf /builder/openwrt/tmp
         make defconfig
         echo "✅ 纯净版配置与依赖刷新完成！"
+        
+        # 校验确保纯 IPv4 生效，未被依赖重新拉起 IPv6
+        grep -q "CONFIG_IPV6=y" /builder/openwrt/.config && { echo "❌ 检测到 IPv6 被依赖重新开启，请检查配置！"; exit 1; }
 
     # 第 11 步：多线程预下载所有软件包源码，并自动清理下载不完整（小于 1KB）的损坏文件
     - name: Download package
