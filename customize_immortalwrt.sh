@@ -79,6 +79,33 @@ chmod +x /etc/tailscale_auto_up.sh
 /etc/tailscale_auto_up.sh >/dev/null 2>&1 &
 EOF
 
+# 2.6 自动启用纯官方 Tailscale 后台服务，并使用 Auth Key 免扫码全自动登录与宣告子网路由
+cat << 'TS_AUTO' > /etc/tailscale_auto_up.sh
+#!/bin/sh
+sleep 35
+if [ -x /etc/init.d/tailscale ]; then
+    /etc/init.d/tailscale enable
+    /etc/init.d/tailscale start
+    sleep 5
+    TS_KEY="__TS_AUTHKEY_PLACEHOLDER__"
+    if [ -n "$TS_KEY" ] && [ "$TS_KEY" != "__TS_AUTHKEY_PLACEHOLDER__" ]; then
+        tailscale up --authkey="$TS_KEY" --advertise-routes=192.168.100.0/24 --accept-routes --accept-dns=false >/dev/null 2>&1 &
+    else
+        tailscale up --advertise-routes=192.168.100.0/24 --accept-routes --accept-dns=false >/dev/null 2>&1 &
+    fi
+fi
+rm -f /etc/tailscale_auto_up.sh
+TS_AUTO
+
+# 安全将 GitHub Secrets 中的 TS_AUTHKEY 替换进开机脚本
+if [ -n "$TS_AUTHKEY" ]; then
+    sed -i "s|__TS_AUTHKEY_PLACEHOLDER__|${TS_AUTHKEY}|g" /etc/tailscale_auto_up.sh
+fi
+
+chmod +x /etc/tailscale_auto_up.sh
+/etc/tailscale_auto_up.sh >/dev/null 2>&1 &
+EOF
+
 # 3. 安全注入 2.4G & 5G WiFi 密码（从 GitHub Secrets 读取）
 printf "uci set wireless.default_radio0.key='%s'\n" "$WIFI_PASS" >> /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
 printf "uci set wireless.default_radio1.key='%s'\n" "$WIFI_PASS" >> /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
