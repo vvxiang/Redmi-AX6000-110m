@@ -46,15 +46,19 @@ uci set firewall.@defaults.forward='REJECT'
 uci delete firewall.@defaults.flow_offloading 2>/dev/null
 uci delete firewall.@defaults.flow_offloading_hw 2>/dev/null
 uci set firewall.@defaults.fullcone='1'
+uci delete network.wan6 2>/dev/null
+uci delete dhcp.lan.ra 2>/dev/null
+uci delete dhcp.lan.dhcpv6 2>/dev/null
+uci commit network
+uci commit dhcp
 uci commit firewall
 
-# 2.4 调大系统最大连接数、开启 BBR 拥塞控制，并开启 IPv4/IPv6 子网路由转发（Tailscale 访问内网必备）
+# 2.4 调大系统最大连接数、开启 BBR 拥塞控制，并开启 IPv4 子网路由转发（Tailscale 访问内网必备）
 cat << 'SYSCTL' >> /etc/sysctl.conf
 net.netfilter.nf_conntrack_max=65536
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
 net.ipv4.ip_forward=1
-net.ipv6.conf.all.forwarding=1
 SYSCTL
 sysctl -p >/dev/null 2>&1
 
