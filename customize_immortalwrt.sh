@@ -46,22 +46,33 @@ uci set firewall.@defaults.forward='REJECT'
 uci delete firewall.@defaults.flow_offloading 2>/dev/null
 uci delete firewall.@defaults.flow_offloading_hw 2>/dev/null
 uci set firewall.@defaults.fullcone='1'
+uci add_list firewall.@zone[0].device='tailscale0'
+
+# 彻底清理 WAN/LAN 接口上的 IPv6 配置与 ULA 局域网 IPv6 前缀
 uci delete network.wan6 2>/dev/null
+uci delete network.globals.ula_prefix 2>/dev/null
+uci set network.wan.ipv6='0'
+uci set network.lan.ipv6='0'
+uci set network.lan.delegate='0'
 uci delete dhcp.lan.ra 2>/dev/null
 uci delete dhcp.lan.dhcpv6 2>/dev/null
-uci add_list firewall.@zone[0].device='tailscale0'
+
 uci commit network
 uci commit dhcp
 uci commit firewall
 
-# 2.4 调大系统最大连接数、开启 BBR 拥塞控制，并开启 IPv4 子网路由转发（Tailscale 访问内网必备）
+# 2.4 调大系统最大连接数、开启 BBR 拥塞控制，并从内核运行时彻底禁用 IPv6（消除所有 fe80:: 本地地址）
 cat << 'SYSCTL' >> /etc/sysctl.conf
 net.netfilter.nf_conntrack_max=65536
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
 net.ipv4.ip_forward=1
+net.ipv6.conf.all.disable_ipv6=1
+net.ipv6.conf.default.disable_ipv6=1
+net.ipv6.conf.lo.disable_ipv6=1
 SYSCTL
 sysctl -p >/dev/null 2>&1
+
 
 # 2.5 自动启用纯官方 Tailscale 后台服务与子网路由宣告
 cat << 'TS_AUTO' > /etc/tailscale_auto_up.sh
