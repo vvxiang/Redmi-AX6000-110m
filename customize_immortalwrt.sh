@@ -49,6 +49,7 @@ uci set firewall.@defaults.fullcone='1'
 uci delete network.wan6 2>/dev/null
 uci delete dhcp.lan.ra 2>/dev/null
 uci delete dhcp.lan.dhcpv6 2>/dev/null
+uci add_list firewall.@zone[0].device='tailscale0'
 uci commit network
 uci commit dhcp
 uci commit firewall
@@ -70,7 +71,7 @@ if [ -x /etc/init.d/tailscale ]; then
     /etc/init.d/tailscale enable
     /etc/init.d/tailscale start
     sleep 5
-    tailscale up --advertise-routes=192.168.100.0/24 --accept-routes --accept-dns=false >/dev/null 2>&1 &
+    tailscale up --advertise-routes=192.168.100.0/24 --accept-routes=false --accept-dns=false --snat-subnet-routes=false >/dev/null 2>&1 &
 fi
 rm -f /etc/tailscale_auto_up.sh
 TS_AUTO
