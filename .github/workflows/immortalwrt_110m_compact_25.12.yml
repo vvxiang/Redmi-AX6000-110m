@@ -209,6 +209,7 @@ jobs:
         ROOT_PASS: ${{ secrets.ROOT_PASS }}
         WIFI_PASS: ${{ secrets.WIFI_PASS }}
         TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+        # 执行命令base64 -w 0 /etc/config/passwall; echo
         PASSWALL_CONF_B64: ${{ secrets.PASSWALL_CONF_B64 }}
         CONFIG_FILE: 'ax6000_immortalwrt_110m_compact.config'
       run: |
