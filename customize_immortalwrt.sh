@@ -37,16 +37,16 @@ uci set wireless.radio1.country='CN'
 uci set wireless.default_radio1.ssid='MT7968_AX6000_5G'
 uci set wireless.default_radio1.encryption='psk2+ccmp'
 
-# 2.3 防火墙安全与兼容 PassWall 深度优化（关闭硬件加速防规则绕过，开启 FullCone NAT）
+# 2.3 防火墙安全与千兆硬件加速优化（开启软硬件流量卸载跑满千兆 + FullCone NAT + 放行 Tailscale）
 uci set firewall.@defaults.synflood_protect='1'
 uci set firewall.@defaults.drop_invalid='1'
 uci set firewall.@defaults.input='ACCEPT'
 uci set firewall.@defaults.output='ACCEPT'
 uci set firewall.@defaults.forward='REJECT'
-uci delete firewall.@defaults.flow_offloading 2>/dev/null
-uci delete firewall.@defaults.flow_offloading_hw 2>/dev/null
+uci set firewall.@defaults.flow_offloading='1'
+uci set firewall.@defaults.flow_offloading_hw='1'
 uci set firewall.@defaults.fullcone='1'
-uci add_list firewall.@zone[0].device='tailscale0'
+uci add_list firewall.@zone.device='tailscale0'
 
 # 彻底清理 WAN/LAN 接口上的 IPv6 配置与 ULA 局域网 IPv6 前缀
 uci delete network.wan6 2>/dev/null
@@ -60,6 +60,7 @@ uci delete dhcp.lan.dhcpv6 2>/dev/null
 uci commit network
 uci commit dhcp
 uci commit firewall
+
 
 # 2.4 调大系统最大连接数、开启 BBR 拥塞控制，并从内核运行时彻底禁用 IPv6（消除所有 fe80:: 本地地址）
 cat << 'SYSCTL' >> /etc/sysctl.conf
