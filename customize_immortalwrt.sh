@@ -114,6 +114,8 @@ printf "printf '%%s\\\\n%%s\\\\n' '%s' '%s' | passwd root >/dev/null 2>&1\n" "$R
 printf "uci set network.wan.proto='pppoe'\n" >> /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
 printf "uci set network.wan.username='%s'\n" "$PPPOE_USER" >> /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
 printf "uci set network.wan.password='%s'\n" "$PPPOE_PASS" >> /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
+printf "uci set network.wan.peerdns='0'\n" >> /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
+printf "uci set network.wan.dns='223.5.5.5 119.29.29.29'\n" >> /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
 printf "uci commit network\nexit 0\n" >> /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
 
 chmod +x /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
