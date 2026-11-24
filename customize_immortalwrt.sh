@@ -126,13 +126,32 @@ if [ -n "$PASSWALL_CONF_B64" ]; then
   echo "✅ PassWall 配置文件已成功打包进固件！"
 fi
 
-# 7. 预置 /etc/rc.local 开机守护（确保保留配置升级或重启后 Tailscale 永远自动启动）
+# 7. 生成精确北京时间编译时间戳，并预置 /etc/rc.local 开机守护（确保无论是否保留配置升级，Tailscale 自启与后台版本号均永远生效）
+BUILD_TAG=$(TZ=Asia/Shanghai date +%Y%m%d-%H%M)
 mkdir -p /builder/openwrt/files/etc
-cat << 'RCLOCAL' > /builder/openwrt/files/etc/rc.local
+
+cat << EOF > /builder/openwrt/files/etc/rc.local
+# 1. 更新网页后台“固件版本”显示栏，与刷入的固件文件名时间戳精确对应
+sed -i "s/DISTRIB_DESCRIPTION=.*/DISTRIB_DESCRIPTION='ImmortalWrt 25.12 (AX6000-110M-${BUILD_TAG})'/g" /etc/openwrt_release
+
+# 2. 确保 Tailscale 服务开机自启并保持运行
 if [ -x /etc/init.d/tailscale ]; then
     /etc/init.d/tailscale enabled || /etc/init.d/tailscale enable
     /etc/init.d/tailscale running || /etc/init.d/tailscale start
 fi
 exit 0
-RCLOCAL
+EOF
 chmod +x /builder/openwrt/files/etc/rc.local
+
+# 8. 写入 SSH 登录欢迎横幅（MobaXterm 连接时顶部同步显示编译时间）
+cat << EOF > /builder/openwrt/files/etc/banner
+  ___                               _        _ __        __         _
+
+ |_ _|_ __ ___  _ __ ___   ___  _ __| |_ __ _| |\ \      / / __ ___ | |_
+  | || '_ \` _ \| '_ \` _ \ / _ \| '__| __/ _\` | | \ \ /\ / / '__/ _ \| __|
+  | || | | | | | | | | | | (_) | |  | || (_| | |  \ V  V /| | | (_) | |_
+ |___|_| |_| |_|_| |_| |_|\___/|_|   \__\__,_|_|   \_/\_/ |_|  \___/ \__|
+ -------------------------------------------------------------------------
+  AX6000 110M Compact Build | 编译时间: ${BUILD_TAG} (北京时间)
+ -------------------------------------------------------------------------
+EOF
