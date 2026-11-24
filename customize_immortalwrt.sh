@@ -125,3 +125,14 @@ if [ -n "$PASSWALL_CONF_B64" ]; then
   chmod 0600 /builder/openwrt/files/etc/config/passwall
   echo "✅ PassWall 配置文件已成功打包进固件！"
 fi
+
+# 7. 预置 /etc/rc.local 开机守护（确保保留配置升级或重启后 Tailscale 永远自动启动）
+mkdir -p /builder/openwrt/files/etc
+cat << 'RCLOCAL' > /builder/openwrt/files/etc/rc.local
+if [ -x /etc/init.d/tailscale ]; then
+    /etc/init.d/tailscale enabled || /etc/init.d/tailscale enable
+    /etc/init.d/tailscale running || /etc/init.d/tailscale start
+fi
+exit 0
+RCLOCAL
+chmod +x /builder/openwrt/files/etc/rc.local
