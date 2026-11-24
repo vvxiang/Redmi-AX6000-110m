@@ -36,6 +36,11 @@ uci set wireless.radio1.disabled='0'
 uci set wireless.radio1.country='CN'
 uci set wireless.default_radio1.ssid='MT7968_AX6000_5G'
 uci set wireless.default_radio1.encryption='psk2+ccmp'
+# 2.2 补充：开启 5G 160MHz 满血频宽（锁定 36 信道避开雷达干扰）并启用 MT7986 无线硬件加速 (WED)
+uci set wireless.radio1.htmode='HE160'
+uci set wireless.radio1.channel='36'
+echo "options mt7915e wed_enable=Y" > /etc/modules.d/mt7915e
+
 
 # 2.3 防火墙安全与千兆硬件加速优化（开启软硬件流量卸载跑满千兆 + FullCone NAT + 放行 Tailscale）
 uci set firewall.@defaults.synflood_protect='1'
