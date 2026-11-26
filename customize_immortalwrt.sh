@@ -132,11 +132,12 @@ if [ -n "$PASSWALL_CONF_B64" ]; then
   chmod 0600 /builder/openwrt/files/etc/config/passwall
   echo "✅ PassWall 配置文件已成功打包进固件！"
 fi
-# 7. 生成精确北京时间编译时间戳，并预置 /etc/rc.local 开机守护（确保无论是否保留配置升级，Tailscale 自启与后台版本号均永远生效）
+# 7. 生成精确北京时间编译时间戳，并预置 /etc/rc.local 开机守护（必须带 #!/bin/sh 解释器头！）
 BUILD_TAG=$(TZ=Asia/Shanghai date +%Y%m%d-%H%M)
 mkdir -p /builder/openwrt/files/etc
 
 cat << EOF > /builder/openwrt/files/etc/rc.local
+#!/bin/sh
 # 1. 更新网页后台“固件版本”显示栏，与刷入的固件文件名时间戳精确对应
 sed -i "s/PRETTY_NAME=.*/PRETTY_NAME=\"ImmortalWrt 25.12 (AX6000-110M-${BUILD_TAG})\"/g" /usr/lib/os-release
 sed -i "s/DISTRIB_DESCRIPTION=.*/DISTRIB_DESCRIPTION='ImmortalWrt 25.12 (AX6000-110M-${BUILD_TAG})'/g" /etc/openwrt_release
@@ -149,6 +150,7 @@ fi
 exit 0
 EOF
 chmod +x /builder/openwrt/files/etc/rc.local
+
 
 
 # 8. 写入 SSH 登录欢迎横幅（MobaXterm 连接时顶部同步显示编译时间）
