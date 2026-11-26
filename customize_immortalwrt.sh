@@ -39,7 +39,7 @@ uci set wireless.default_radio1.encryption='psk2+ccmp'
 # 2.2 补充：开启 5G 160MHz 满血频宽（锁定 36 信道避开雷达干扰）并启用 MT7986 无线硬件加速 (WED)
 uci set wireless.radio1.htmode='HE160'
 uci set wireless.radio1.channel='36'
-echo "options mt7915e wed_enable=Y" > /etc/modules.d/mt7915e
+
 
 
 # 2.3 防火墙安全与千兆硬件加速优化（开启软硬件流量卸载跑满千兆 + FullCone NAT + 放行 Tailscale）
@@ -132,13 +132,13 @@ if [ -n "$PASSWALL_CONF_B64" ]; then
   chmod 0600 /builder/openwrt/files/etc/config/passwall
   echo "✅ PassWall 配置文件已成功打包进固件！"
 fi
-
 # 7. 生成精确北京时间编译时间戳，并预置 /etc/rc.local 开机守护（确保无论是否保留配置升级，Tailscale 自启与后台版本号均永远生效）
 BUILD_TAG=$(TZ=Asia/Shanghai date +%Y%m%d-%H%M)
 mkdir -p /builder/openwrt/files/etc
 
 cat << EOF > /builder/openwrt/files/etc/rc.local
 # 1. 更新网页后台“固件版本”显示栏，与刷入的固件文件名时间戳精确对应
+sed -i "s/PRETTY_NAME=.*/PRETTY_NAME=\"ImmortalWrt 25.12 (AX6000-110M-${BUILD_TAG})\"/g" /usr/lib/os-release
 sed -i "s/DISTRIB_DESCRIPTION=.*/DISTRIB_DESCRIPTION='ImmortalWrt 25.12 (AX6000-110M-${BUILD_TAG})'/g" /etc/openwrt_release
 
 # 2. 确保 Tailscale 服务开机自启并保持运行
@@ -149,6 +149,7 @@ fi
 exit 0
 EOF
 chmod +x /builder/openwrt/files/etc/rc.local
+
 
 # 8. 写入 SSH 登录欢迎横幅（MobaXterm 连接时顶部同步显示编译时间）
 cat << EOF > /builder/openwrt/files/etc/banner
