@@ -53,6 +53,9 @@ uci set firewall.@defaults[0].flow_offloading='1'
 # （加密流量被 PPE 旁路，导致节点在线但数据通道不通）。软件卸载仍能跑满千兆且不碰 WireGuard。
 uci set firewall.@defaults[0].flow_offloading_hw='0'
 uci set firewall.@defaults[0].fullcone='1'
+# 【新增】PPPoE 环境 MTU 1492，开启 MSS 钳制避免大包黑洞导致测速上不去
+# 25.12 (fw4) 在 defaults 段设 mtu_fix=1 即可自动生成 mangle 规则
+uci set firewall.@defaults[0].mtu_fix='1'
 
 # 【修复】zone 也是匿名 section 且有多个(lan/wan)，原写法 @zone 无索引会失败。
 #         这里按 name 精确找到 lan zone 再把 tailscale0 加进去。
@@ -105,21 +108,28 @@ for i in $(seq 1 60); do
 done
 log "network wait done"
 
-# 最多重试 10 次（间隔 30 秒），确认已登录后退出
+# 最多重试 10 次（间隔 30 秒）
+# 【关键修复】原来用 tailscale status 匹配 "logged out" 判断，但 tailscaled 未就绪时
+# 输出的是 "Failed to connect to local Tailscale daemon"，匹配不到导致误判为已登录直接退出。
+# 改为用 tailscale ip -4 是否返回 100.x 地址作为唯一成功标准，其余情况一律重试。
 for i in $(seq 1 10); do
-    if tailscale status 2>&1 | grep -qiE 'logged out|needs login|not logged'; then
-        if [ -n "$TS_KEY" ] && [ "$TS_KEY" != "__TS_AUTHKEY_PLACEHOLDER__" ]; then
-            log "attempt $i: tailscale up with authkey"
-            tailscale up --authkey="$TS_KEY" --advertise-routes=192.168.100.0/24 \
-                --accept-routes=false --accept-dns=false --snat-subnet-routes=true >>"$LOG" 2>&1
-        else
-            log "TS_AUTHKEY not injected, skip"
+    TS_IP=$(tailscale ip -4 2>/dev/null | head -1)
+    case "$TS_IP" in
+        100.*)
+            log "tailscale logged in, ip=$TS_IP"
             break
-        fi
-    else
-        log "tailscale already logged in"
-        break
-    fi
+            ;;
+        *)
+            if [ -n "$TS_KEY" ] && [ "$TS_KEY" != "__TS_AUTHKEY_PLACEHOLDER__" ]; then
+                log "attempt $i: tailscale up with authkey (current ip='${TS_IP}')"
+                tailscale up --authkey="$TS_KEY" --advertise-routes=192.168.100.0/24 \
+                    --accept-routes=false --accept-dns=false --snat-subnet-routes=true >>"$LOG" 2>&1
+            else
+                log "TS_AUTHKEY not injected, skip"
+                break
+            fi
+            ;;
+    esac
     sleep 30
 done
 log "guard exit"
@@ -173,6 +183,15 @@ cat << EOF > /builder/openwrt/files/etc/rc.local
 #!/bin/sh
 sed -i "s/PRETTY_NAME=.*/PRETTY_NAME=\"ImmortalWrt 25.12 (AX6000-110M-${BUILD_TAG})\"/g" /usr/lib/os-release
 sed -i "s/DISTRIB_DESCRIPTION=.*/DISTRIB_DESCRIPTION='ImmortalWrt 25.12 (AX6000-110M-${BUILD_TAG})'/g" /etc/openwrt_release
+
+# 【兜底】uci-defaults 只在首次开机执行，保留配置升级时不会重跑。
+# 这里每次开机强制对齐关键加速/MTU 配置，确保重新编译刷机后一定生效。
+uci set firewall.@defaults[0].flow_offloading='1'
+uci set firewall.@defaults[0].flow_offloading_hw='0'
+uci set firewall.@defaults[0].mtu_fix='1'
+uci commit firewall
+/etc/init.d/firewall reload >/dev/null 2>&1
+
 if [ -x /etc/init.d/tailscale ]; then
     /etc/init.d/tailscale enabled || /etc/init.d/tailscale enable
     /etc/init.d/tailscale running || /etc/init.d/tailscale start
