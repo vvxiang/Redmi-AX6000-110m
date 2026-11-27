@@ -182,7 +182,7 @@ jobs:
     # 9.1 缓存已编译好的交叉编译工具链（staging_dir），命中缓存可跳过漫长的工具链编译
     - name: Cache OpenWrt Toolchain
       id: cache-toolchain
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           /builder/openwrt/staging_dir/host
@@ -194,7 +194,7 @@ jobs:
 
     # 9.2 缓存 C/C++ 目标文件编译缓存（ccache），进一步缩短增量编译时间
     - name: Cache ccache
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: /builder/ccache
         key: ${{ runner.os }}-ccache-ax6000-${{ github.run_id }}
