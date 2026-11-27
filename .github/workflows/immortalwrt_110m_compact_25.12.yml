@@ -117,6 +117,7 @@ jobs:
           $(Device/xiaomi_redmi-router-ax6000-stock)
           DEVICE_VARIANT := (hanwckf 110M layout)
           DEVICE_DTS := mt7986a-xiaomi-redmi-router-ax6000-110m
+          BOARD_NAME := xiaomi_redmi-router-ax6000
           SUPPORTED_DEVICES := xiaomi,redmi-router-ax6000 xiaomi,redmi-router-ax6000-110m
 
           IMAGE_SIZE := 112640k
