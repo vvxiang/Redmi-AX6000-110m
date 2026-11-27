@@ -90,16 +90,30 @@ net.ipv6.conf.lo.disable_ipv6=1
 SYSCTL
 sysctl -p >/dev/null 2>&1
 
-# 2.5 自动启用 Tailscale：等待网络就绪后登录，失败自动重试，全程写日志
+# 2.5 自动启用 Tailscale：从固件内的 authkey 文件读 key，等待网络就绪后登录，失败自动重试，全程写日志
+# 【关键改造】key 不再靠 uci-defaults 里替换占位符（该链路脆弱，实测会出现 TS_AUTHKEY not injected）。
+# 改为编译期把 key 直接写成固件文件 /etc/tailscale-authkey，guard 运行时读取，简单可靠且可独立验证。
 cat << 'TS_GUARD' > /etc/tailscale_guard.sh
 #!/bin/sh
-TS_KEY="__TS_AUTHKEY_PLACEHOLDER__"
 LOG="/var/log/tailscale-guard.log"
+KEYFILE="/etc/tailscale-authkey"
 log() { echo "[$(date '+%F %T')] $*" >> "$LOG"; }
 log "guard started"
 
 /etc/init.d/tailscale enable >/dev/null 2>&1
 /etc/init.d/tailscale start >/dev/null 2>&1
+
+# 读取 authkey（从独立文件，不再依赖占位符替换）
+TS_KEY=""
+if [ -s "$KEYFILE" ]; then
+    TS_KEY=$(head -n 1 "$KEYFILE")
+    case "$TS_KEY" in
+        tskey-*) log "authkey loaded from $KEYFILE (prefix ok)" ;;
+        *) log "WARN: $KEYFILE content does not start with tskey-"; TS_KEY="" ;;
+    esac
+else
+    log "ERROR: $KEYFILE missing or empty -> cannot login"
+fi
 
 # 等待 PPPoE 拿到默认路由（最多 3 分钟），避免网络未就绪时登录失败
 for i in $(seq 1 60); do
@@ -108,11 +122,9 @@ for i in $(seq 1 60); do
 done
 log "network wait done"
 
-# 最多重试 10 次（间隔 30 秒）
-# 【关键修复】原来用 tailscale status 匹配 "logged out" 判断，但 tailscaled 未就绪时
-# 输出的是 "Failed to connect to local Tailscale daemon"，匹配不到导致误判为已登录直接退出。
-# 改为用 tailscale ip -4 是否返回 100.x 地址作为唯一成功标准，其余情况一律重试。
-for i in $(seq 1 10); do
+# 持续重试直到登录成功（最多 20 次，间隔 30 秒；已登录则立即退出）
+# 成功标准：tailscale ip -4 返回 100.x 地址（tailscaled 未就绪时的 "Failed to connect" 一律视为未登录）
+for i in $(seq 1 20); do
     TS_IP=$(tailscale ip -4 2>/dev/null | head -1)
     case "$TS_IP" in
         100.*)
@@ -120,12 +132,12 @@ for i in $(seq 1 10); do
             break
             ;;
         *)
-            if [ -n "$TS_KEY" ] && [ "$TS_KEY" != "__TS_AUTHKEY_PLACEHOLDER__" ]; then
+            if [ -n "$TS_KEY" ]; then
                 log "attempt $i: tailscale up with authkey (current ip='${TS_IP}')"
                 tailscale up --authkey="$TS_KEY" --advertise-routes=192.168.100.0/24 \
                     --accept-routes=false --accept-dns=false --snat-subnet-routes=true >>"$LOG" 2>&1
             else
-                log "TS_AUTHKEY not injected, skip"
+                log "attempt $i: no valid authkey, skip"
                 break
             fi
             ;;
@@ -139,9 +151,14 @@ chmod +x /etc/tailscale_guard.sh
 nohup /etc/tailscale_guard.sh >/dev/null 2>&1 &
 EOF
 
-# 安全将 GitHub Secrets 中的 TS_AUTHKEY 替换进路由器的首次开机初始化脚本中
+# 【关键改造】把 TS_AUTHKEY 直接写成固件文件，不再依赖 uci-defaults 里的占位符替换。
+# 编译日志会明确打印注入结果，便于一眼确认（旧方案日志无输出，失败了都不知道）。
 if [ -n "$TS_AUTHKEY" ]; then
-    sed -i "s|__TS_AUTHKEY_PLACEHOLDER__|${TS_AUTHKEY}|g" /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
+    printf '%s\n' "$TS_AUTHKEY" > /builder/openwrt/files/etc/tailscale-authkey
+    chmod 600 /builder/openwrt/files/etc/tailscale-authkey
+    echo "TS_AUTHKEY injected into firmware: YES (len=${#TS_AUTHKEY})"
+else
+    echo "TS_AUTHKEY injected into firmware: NO  *** WARNING: secret is empty ***"
 fi
 
 # 3. 安全注入 2.4G & 5G WiFi 密码（从 GitHub Secrets 读取）
