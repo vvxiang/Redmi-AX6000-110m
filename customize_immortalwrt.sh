@@ -5,6 +5,7 @@
 # licensed under the MIT License
 # See /LICENSE for more information
 # Description: Build OpenWrt using GitHub Actions
+# 修复版：修正 UCI 匿名段语法 + 补齐 WED 硬件加速配置
 #=================================================
 
 # 修改默认主机名
@@ -28,30 +29,36 @@ cat > /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip <<'EOF'
 # 2.1 开启并配置 2.4G radio0 基础无线参数
 uci set wireless.radio0.disabled='0'
 uci set wireless.radio0.country='CN'
-uci set wireless.default_radio0.ssid='MT7968_AX6000_2.4G'
+uci set wireless.default_radio0.ssid='MT7986_AX6000_2.4G'
 uci set wireless.default_radio0.encryption='psk2+ccmp'
 
 # 2.2 开启并配置 5G radio1 基础无线参数
 uci set wireless.radio1.disabled='0'
 uci set wireless.radio1.country='CN'
-uci set wireless.default_radio1.ssid='MT7968_AX6000_5G'
+uci set wireless.default_radio1.ssid='MT7986_AX6000_5G'
 uci set wireless.default_radio1.encryption='psk2+ccmp'
-# 2.2 补充：开启 5G 160MHz 满血频宽（锁定 36 信道避开雷达干扰）并启用 MT7986 无线硬件加速 (WED)
 uci set wireless.radio1.htmode='HE160'
 uci set wireless.radio1.channel='36'
 
+# 2.3 防火墙安全与千兆硬件加速优化
+# 【修复】匿名 section 必须写成 @defaults[0]，原代码 @defaults 缺少索引会导致 uci set 失败，
+#         结果是 flow_offloading / flow_offloading_hw 根本没有生效，硬件加速完全没开。
+uci set firewall.@defaults[0].synflood_protect='1'
+uci set firewall.@defaults[0].drop_invalid='1'
+uci set firewall.@defaults[0].input='ACCEPT'
+uci set firewall.@defaults[0].output='ACCEPT'
+uci set firewall.@defaults[0].forward='REJECT'
+uci set firewall.@defaults[0].flow_offloading='1'
+uci set firewall.@defaults[0].flow_offloading_hw='1'
+uci set firewall.@defaults[0].fullcone='1'
 
-
-# 2.3 防火墙安全与千兆硬件加速优化（开启软硬件流量卸载跑满千兆 + FullCone NAT + 放行 Tailscale）
-uci set firewall.@defaults.synflood_protect='1'
-uci set firewall.@defaults.drop_invalid='1'
-uci set firewall.@defaults.input='ACCEPT'
-uci set firewall.@defaults.output='ACCEPT'
-uci set firewall.@defaults.forward='REJECT'
-uci set firewall.@defaults.flow_offloading='1'
-uci set firewall.@defaults.flow_offloading_hw='1'
-uci set firewall.@defaults.fullcone='1'
-uci add_list firewall.@zone.device='tailscale0'
+# 【修复】zone 也是匿名 section 且有多个(lan/wan)，原写法 @zone 无索引会失败。
+#         这里按 name 精确找到 lan zone 再把 tailscale0 加进去。
+for z in $(uci show firewall 2>/dev/null | sed -n 's/^\(firewall\.@zone\[[0-9]*\]\)\.name=.*/\1/p'); do
+    if [ "$(uci get ${z}.name 2>/dev/null)" = "lan" ]; then
+        uci add_list ${z}.device='tailscale0'
+    fi
+done
 
 # 彻底清理 WAN/LAN 接口上的 IPv6 配置与 ULA 局域网 IPv6 前缀
 uci delete network.wan6 2>/dev/null
@@ -66,8 +73,7 @@ uci commit network
 uci commit dhcp
 uci commit firewall
 
-
-# 2.4 调大系统最大连接数、开启 BBR 拥塞控制，并从内核运行时彻底禁用 IPv6（消除所有 fe80:: 本地地址）
+# 2.4 调大系统最大连接数、开启 BBR 拥塞控制，并从内核运行时彻底禁用 IPv6
 cat << 'SYSCTL' >> /etc/sysctl.conf
 net.netfilter.nf_conntrack_max=65536
 net.core.default_qdisc=fq
@@ -79,7 +85,7 @@ net.ipv6.conf.lo.disable_ipv6=1
 SYSCTL
 sysctl -p >/dev/null 2>&1
 
-# 2.5 自动启用纯官方 Tailscale 后台服务，并使用 Auth Key 免扫码全自动登录与宣告子网路由
+# 2.5 自动启用纯官方 Tailscale 后台服务
 cat << 'TS_AUTO' > /etc/tailscale_auto_up.sh
 #!/bin/sh
 sleep 35
@@ -106,7 +112,6 @@ if [ -n "$TS_AUTHKEY" ]; then
     sed -i "s|__TS_AUTHKEY_PLACEHOLDER__|${TS_AUTHKEY}|g" /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
 fi
 
-
 # 3. 安全注入 2.4G & 5G WiFi 密码（从 GitHub Secrets 读取）
 printf "uci set wireless.default_radio0.key='%s'\n" "$WIFI_PASS" >> /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
 printf "uci set wireless.default_radio1.key='%s'\n" "$WIFI_PASS" >> /builder/openwrt/files/etc/uci-defaults/99-set-default-wifi-ip
@@ -132,17 +137,20 @@ if [ -n "$PASSWALL_CONF_B64" ]; then
   chmod 0600 /builder/openwrt/files/etc/config/passwall
   echo "✅ PassWall 配置文件已成功打包进固件！"
 fi
-# 7. 生成精确北京时间编译时间戳，并预置 /etc/rc.local 开机守护（必须带 #!/bin/sh 解释器头！）
-BUILD_TAG=$(TZ=Asia/Shanghai date +%Y%m%d-%H%M)
-mkdir -p /builder/openwrt/files/etc
 
+# 7. 【关键新增】开启 MT7986 5G 无线硬件加速 WED
+# 原代码注释声称"启用 WED"，但通篇没有任何实际写入，导致无线流量全靠 CPU 软转发。
+# 按 OpenWrt 官方文档，OpenWrt 24.10+（含 25.12）需写入 /etc/modules.conf。
+mkdir -p /builder/openwrt/files/etc
+echo 'options mt7915e wed_enable=Y' > /builder/openwrt/files/etc/modules.conf
+echo "✅ 已为 MT7986 5G  radio 开启 WED 硬件加速 (wed_enable=Y)"
+
+# 8. 写入 SSH 登录欢迎横幅
+BUILD_TAG=$(TZ=Asia/Shanghai date +%Y%m%d-%H%M)
 cat << EOF > /builder/openwrt/files/etc/rc.local
 #!/bin/sh
-# 1. 更新网页后台“固件版本”显示栏，与刷入的固件文件名时间戳精确对应
 sed -i "s/PRETTY_NAME=.*/PRETTY_NAME=\"ImmortalWrt 25.12 (AX6000-110M-${BUILD_TAG})\"/g" /usr/lib/os-release
 sed -i "s/DISTRIB_DESCRIPTION=.*/DISTRIB_DESCRIPTION='ImmortalWrt 25.12 (AX6000-110M-${BUILD_TAG})'/g" /etc/openwrt_release
-
-# 2. 确保 Tailscale 服务开机自启并保持运行
 if [ -x /etc/init.d/tailscale ]; then
     /etc/init.d/tailscale enabled || /etc/init.d/tailscale enable
     /etc/init.d/tailscale running || /etc/init.d/tailscale start
@@ -151,12 +159,8 @@ exit 0
 EOF
 chmod +x /builder/openwrt/files/etc/rc.local
 
-
-
-# 8. 写入 SSH 登录欢迎横幅（MobaXterm 连接时顶部同步显示编译时间）
 cat << EOF > /builder/openwrt/files/etc/banner
   ___                               _        _ __        __         _
-
  |_ _|_ __ ___  _ __ ___   ___  _ __| |_ __ _| |\ \      / / __ ___ | |_
   | || '_ \` _ \| '_ \` _ \ / _ \| '__| __/ _\` | | \ \ /\ / / '__/ _ \| __|
   | || | | | | | | | | | | (_) | |  | || (_| | |  \ V  V /| | | (_) | |_
