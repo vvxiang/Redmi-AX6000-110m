@@ -49,7 +49,9 @@ uci set firewall.@defaults[0].input='ACCEPT'
 uci set firewall.@defaults[0].output='ACCEPT'
 uci set firewall.@defaults[0].forward='REJECT'
 uci set firewall.@defaults[0].flow_offloading='1'
-uci set firewall.@defaults[0].flow_offloading_hw='1'
+# 【关键】关闭硬件流量卸载：Tailscale 底层是 WireGuard，其与 hw flow offload 有已知兼容性问题
+# （加密流量被 PPE 旁路，导致节点在线但数据通道不通）。软件卸载仍能跑满千兆且不碰 WireGuard。
+uci set firewall.@defaults[0].flow_offloading_hw='0'
 uci set firewall.@defaults[0].fullcone='1'
 
 # 【修复】zone 也是匿名 section 且有多个(lan/wan)，原写法 @zone 无索引会失败。
@@ -85,26 +87,46 @@ net.ipv6.conf.lo.disable_ipv6=1
 SYSCTL
 sysctl -p >/dev/null 2>&1
 
-# 2.5 自动启用纯官方 Tailscale 后台服务
-cat << 'TS_AUTO' > /etc/tailscale_auto_up.sh
+# 2.5 自动启用 Tailscale：等待网络就绪后登录，失败自动重试，全程写日志
+cat << 'TS_GUARD' > /etc/tailscale_guard.sh
 #!/bin/sh
-sleep 35
-if [ -x /etc/init.d/tailscale ]; then
-    /etc/init.d/tailscale enable
-    /etc/init.d/tailscale start
-    sleep 5
-    TS_KEY="__TS_AUTHKEY_PLACEHOLDER__"
-    if [ -n "$TS_KEY" ] && [ "$TS_KEY" != "__TS_AUTHKEY_PLACEHOLDER__" ]; then
-        tailscale up --authkey="$TS_KEY" --advertise-routes=192.168.100.0/24 --accept-routes=false --accept-dns=false --snat-subnet-routes=true >/dev/null 2>&1 &
-    else
-        tailscale up --advertise-routes=192.168.100.0/24 --accept-routes=false --accept-dns=false --snat-subnet-routes=true >/dev/null 2>&1 &
-    fi
-fi
-rm -f /etc/tailscale_auto_up.sh
-TS_AUTO
+TS_KEY="__TS_AUTHKEY_PLACEHOLDER__"
+LOG="/var/log/tailscale-guard.log"
+log() { echo "[$(date '+%F %T')] $*" >> "$LOG"; }
+log "guard started"
 
-chmod +x /etc/tailscale_auto_up.sh
-/etc/tailscale_auto_up.sh >/dev/null 2>&1 &
+/etc/init.d/tailscale enable >/dev/null 2>&1
+/etc/init.d/tailscale start >/dev/null 2>&1
+
+# 等待 PPPoE 拿到默认路由（最多 3 分钟），避免网络未就绪时登录失败
+for i in $(seq 1 60); do
+    ip route 2>/dev/null | grep -q '^default' && break
+    sleep 3
+done
+log "network wait done"
+
+# 最多重试 10 次（间隔 30 秒），确认已登录后退出
+for i in $(seq 1 10); do
+    if tailscale status 2>&1 | grep -qiE 'logged out|needs login|not logged'; then
+        if [ -n "$TS_KEY" ] && [ "$TS_KEY" != "__TS_AUTHKEY_PLACEHOLDER__" ]; then
+            log "attempt $i: tailscale up with authkey"
+            tailscale up --authkey="$TS_KEY" --advertise-routes=192.168.100.0/24 \
+                --accept-routes=false --accept-dns=false --snat-subnet-routes=true >>"$LOG" 2>&1
+        else
+            log "TS_AUTHKEY not injected, skip"
+            break
+        fi
+    else
+        log "tailscale already logged in"
+        break
+    fi
+    sleep 30
+done
+log "guard exit"
+TS_GUARD
+
+chmod +x /etc/tailscale_guard.sh
+nohup /etc/tailscale_guard.sh >/dev/null 2>&1 &
 EOF
 
 # 安全将 GitHub Secrets 中的 TS_AUTHKEY 替换进路由器的首次开机初始化脚本中
@@ -154,6 +176,10 @@ sed -i "s/DISTRIB_DESCRIPTION=.*/DISTRIB_DESCRIPTION='ImmortalWrt 25.12 (AX6000-
 if [ -x /etc/init.d/tailscale ]; then
     /etc/init.d/tailscale enabled || /etc/init.d/tailscale enable
     /etc/init.d/tailscale running || /etc/init.d/tailscale start
+fi
+# 每次开机拉起 Tailscale 登录守护（带防重复），未登录时用 authkey 自动重试
+if [ -x /etc/tailscale_guard.sh ] && ! pgrep -f tailscale_guard >/dev/null 2>&1; then
+    nohup /etc/tailscale_guard.sh >/dev/null 2>&1 &
 fi
 exit 0
 EOF
